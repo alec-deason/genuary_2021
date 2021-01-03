@@ -1,10 +1,10 @@
 use nannou::{
     prelude::*,
-    noise::{Worley, NoiseFn},
+    noise::{Worley, Fbm, NoiseFn},
 };
 
 fn main() {
-    nannou::sketch(jan_01).run()
+    nannou::sketch(jan_02).run()
 }
 
 fn jan_01(app: &App, frame: Frame) {
@@ -45,6 +45,37 @@ fn jan_01(app: &App, frame: Frame) {
                 noise.get([x as f64, y as f64]) as f32,
             );
         }
+    }
+    draw.to_frame(app, &frame).unwrap();
+}
+
+fn jan_02(app: &App, frame: Frame) {
+    let draw = app.draw();
+
+    let win_rect = app.window_rect();
+    draw.background().color(PLUM);
+
+    let mx = app.mouse.x;
+    let my = app.mouse.y;
+
+    let d = Vector2::new(mx, my).distance(Vector2::new(0.0, 0.0)) / (win_rect.w().min(win_rect.h())/2.0);
+
+    let mut r = win_rect.w() * 2.0;
+    let noise = Fbm::default();
+    let step = 150.0 - 20.0*d;
+    let offset_strength = step/2.0;
+    let mut i = 0;
+    let position_jitter_magnitude = 0.001f64;
+    while r > step {
+        let x = mx + noise.get([(mx + r) as f64*position_jitter_magnitude, (my + r) as f64 * position_jitter_magnitude]) as f32 * offset_strength - offset_strength/2.0;
+        let y = my + noise.get([(mx + r) as f64*position_jitter_magnitude, (my + r) as f64 * position_jitter_magnitude + 12340.0]) as f32 * offset_strength - offset_strength/2.0;
+        draw.ellipse().xy((x,y).into()).wh((r,r).into()).hsv(
+            noise.get([i as f64, i as f64]) as f32,
+            noise.get([i as f64, i as f64]) as f32,
+            noise.get([i as f64, i as f64]) as f32,
+        );
+        i += 1;
+        r -= step;
     }
     draw.to_frame(app, &frame).unwrap();
 }
