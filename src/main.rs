@@ -4,7 +4,7 @@ use nannou::{
 };
 
 fn main() {
-    nannou::sketch(jan_02).run()
+    nannou::sketch(jan_03).run()
 }
 
 fn jan_01(app: &App, frame: Frame) {
@@ -77,5 +77,50 @@ fn jan_02(app: &App, frame: Frame) {
         i += 1;
         r -= step;
     }
+    draw.to_frame(app, &frame).unwrap();
+}
+
+fn jan_03(app: &App, frame: Frame) {
+    let draw = app.draw();
+
+    let win_rect = app.window_rect();
+    draw.background().color(rgb(0.05, 0.05, 0.05));
+    let noise = Fbm::default();
+    for i in 0..5000 {
+        let x = noise.get([i as f64, i as f64]) as f32 * win_rect.w() * 10.0;
+        let y = noise.get([i as f64 + 12345.0, i as f64]) as f32 * win_rect.h() * 10.0;
+        let v = noise.get([app.time as f64, app.time as f64 + i as f64 * 1000.0]).abs().powf(1.0) as f32 ;
+        draw.ellipse().xy((x,y).into()).wh((4.0, 4.0).into()).hsv(0.0, 0.0, 1.0-v);
+    }
+    let noise_scale = 0.001;
+
+    let h = 238.9/360.0;
+    let s = 0.935;
+    let mut v = 0.80;
+
+    for i in 0..10 {
+        let b = 0.8 - noise.get([i as f64, i as f64]) as f32*0.6;
+        let o = noise.get([i as f64, i as f64]) as f32 * 10.0 + if i%2==0 { app.time } else { -app.time };
+        let y = win_rect.bottom() + win_rect.h() * (1.0-i as f32 / 10.0) - 100.0;
+        let mut vertices:Vec<_> = (0..win_rect.w() as u32).map(|x| {
+
+            let p = 100.0 - 10.0 * noise.get([x as f64 * noise_scale, y as f64]) as f32;
+            let y = y + (x as f32 / p + o).sin() * 30.0;
+            pt2(x as f32 - win_rect.w()/2.0, y)
+        }).collect();
+        let mut cap_vertices = vertices.clone();
+        let mut cap_vertices_lower:Vec<_> = vertices.iter().copied().map(|p| pt2(p.x, (p.y-y)*0.8+y - 40.0)).collect();
+        cap_vertices_lower.reverse();
+        cap_vertices.extend(cap_vertices_lower);
+        vertices.push(pt2(1000.0, -1000.0));
+        vertices.push(pt2(-1000.0, -1000.0));
+
+        draw.polygon().points(vertices.clone()).hsv(h, s, v);
+        draw.polygon().points(cap_vertices).hsv(h, s, v+0.1);
+        draw.polyline().weight(5.0).points(vertices).hsv(h, s, v-0.1);
+
+        v -= 0.8/10.0;
+    }
+
     draw.to_frame(app, &frame).unwrap();
 }
