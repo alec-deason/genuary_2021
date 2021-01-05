@@ -4,7 +4,7 @@ use nannou::{
 };
 
 fn main() {
-    nannou::sketch(jan_03).run()
+    nannou::sketch(jan_04).run()
 }
 
 fn jan_01(app: &App, frame: Frame) {
@@ -122,5 +122,35 @@ fn jan_03(app: &App, frame: Frame) {
         v -= 0.8/10.0;
     }
 
+    draw.to_frame(app, &frame).unwrap();
+}
+
+fn jan_04(app: &App, frame: Frame) {
+    let draw = app.draw();
+    draw.background().color(hsv(0.1, 0.1, 0.005));
+
+    let win_rect = app.window_rect();
+
+    let noise = Fbm::default();
+    let noise_scale = 0.0015;
+    let line_count = 20000;
+
+    let time_dilation = 0.1;
+    let time = app.time * time_dilation;
+
+    for x in 0..line_count {
+        let x = (x as f32 / line_count as f32) * win_rect.w() - win_rect.w()/3.0;
+        let y = (x + time).sin() * ((50.0 + 100.0 * noise.get([(x as f64 + time as f64), x as f64]) as f32) + 200.0 * ((x + time) * 0.01).sin());
+        let len = 100.0 + 300.0 * noise.get([(x as f64 + time as f64) * noise_scale, y as f64 * noise_scale]) as f32;
+        let slope = (x + time).cos();
+        let xa = x - len;
+        let ya = y - len*slope;
+        let xb = x + len;
+        let yb = y + len*slope;
+
+        let weight = 1.0 + 5.0 * noise.get([(x as f64 + time as f64), x as f64]) as f32;
+        let h = (noise.get([(x as f64 + time as f64), x as f64]) as f32 + time * 0.01) % 1.0;
+        draw.line().start(pt2(xa, ya)).end(pt2(xb, yb)).hsv(h, 1.0, len/200.0).weight(weight);
+    }
     draw.to_frame(app, &frame).unwrap();
 }
