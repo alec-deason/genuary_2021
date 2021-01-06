@@ -1,10 +1,11 @@
 use nannou::{
+    rand::prelude::*,
     prelude::*,
     noise::{Worley, Fbm, NoiseFn},
 };
 
 fn main() {
-    nannou::sketch(jan_04).run()
+    nannou::sketch(jan_05).run()
 }
 
 fn jan_01(app: &App, frame: Frame) {
@@ -152,5 +153,41 @@ fn jan_04(app: &App, frame: Frame) {
         let h = (noise.get([(x as f64 + time as f64), x as f64]) as f32 + time * 0.01) % 1.0;
         draw.line().start(pt2(xa, ya)).end(pt2(xb, yb)).hsv(h, 1.0, len/200.0).weight(weight);
     }
+    draw.to_frame(app, &frame).unwrap();
+}
+
+fn jan_05(app: &App, frame: Frame) {
+    let draw = app.draw();
+
+    let mut rng = SmallRng::seed_from_u64(app.elapsed_frames());
+
+    let win_rect = app.window_rect();
+
+    draw.rect().wh((win_rect.w(), win_rect.h()).into()).color(hsva(0.1, 0.1, 0.005, 0.05));
+
+    let noise = Fbm::default();
+
+
+    let mut color = hsv(1.0, 1.0, 1.0);
+    let mut loc = pt2(0.0, 0.0);
+    let n_sample = (noise.get([app.time as f64, app.time as f64]) + 0.2).min(1.0).powf(4.0) as f32;
+    let step_scale = 20.0 + 40.0 * n_sample;
+    let h_scale = 10.0;
+    let s_scale = 0.001;
+    let v_scale = 0.01 * n_sample;
+    for _ in 0..5000 {
+        loc.x += (rng.gen::<f32>() - 0.5) * step_scale;
+        loc.y += (rng.gen::<f32>() - 0.5) * step_scale;
+
+        color.hue += (rng.gen::<f32>() - 0.5) * h_scale;
+        /*
+        color.saturation += (rng.gen::<f32>() - 0.5) * s_scale;
+        color.saturation %= 1.0;
+        */
+        color.value += (rng.gen::<f32>() - 0.5) * v_scale;
+        color.value %= 1.0;
+        draw.ellipse().wh((15.0, 15.0).into()).xy(loc).color(color);
+    }
+
     draw.to_frame(app, &frame).unwrap();
 }

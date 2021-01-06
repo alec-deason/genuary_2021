@@ -8,3 +8,7 @@ edition = "2018"
 
 [dependencies]
 nannou = "0.15.0"
+
+[profile.dev]
+opt-level = 3
+debug = false
