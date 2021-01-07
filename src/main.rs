@@ -2,10 +2,19 @@ use nannou::{
     rand::prelude::*,
     prelude::*,
     noise::{Worley, Fbm, NoiseFn},
+    math::{Matrix4, Rad},
 };
 
 fn main() {
-    nannou::sketch(jan_05).run()
+    nannou::sketch(jan_06).run()
+}
+
+fn captured_frame_path(app: &App, num: u64) -> std::path::PathBuf {
+    app.project_path()
+        .expect("failed to locate `project_path`")
+        .join(app.exe_name().unwrap())
+        .join(format!("{:03}", num))
+        .with_extension("png")
 }
 
 fn jan_01(app: &App, frame: Frame) {
@@ -189,5 +198,75 @@ fn jan_05(app: &App, frame: Frame) {
         draw.ellipse().wh((15.0, 15.0).into()).xy(loc).color(color);
     }
 
+    draw.to_frame(app, &frame).unwrap();
+}
+
+fn jan_06(app: &App, frame: Frame) {
+    let draw = app.draw();
+    draw.background().color(hsv(0.1, 0.1, 0.005));
+
+    let mut rng = SmallRng::seed_from_u64(app.elapsed_frames());
+
+    let period = 60*3;
+    let noise_a = ((app.elapsed_frames() % period) as f64) / period as f64;
+    let noise_a = noise_a * std::f64::consts::PI*2.0;
+    let noise_scale = 0.05;
+    let noise_x = noise_a.cos() * noise_scale;
+    let noise_y = noise_a.sin() * noise_scale;
+
+    let win_rect = app.window_rect();
+
+
+    let lattice_w = 50.0;
+    let lattice_h = 100.0;
+
+    let mut lx = win_rect.left();
+    let mut a = noise_a as f32;
+    let mut reflection = 1.0;
+
+    let noise = Fbm::default();
+    let colors:Vec<_> = (0..8).map(|i| {
+        hsv(
+            noise.get([noise_x, noise_y + i as f64 * 10000.0]) as f32 % 1.0,
+            1.0,
+            noise.get([noise_x + i as f64 * 10000.0, noise_y + i as f64 * 10000.0]) as f32 % 1.0,
+        )
+    }).collect();
+    let object = |draw: Draw| {
+        for i in 0..40 {
+            let r = noise.get([noise_x + 10000.0, noise_y + i as f64 * 10000.0]) as f32;
+            let r2 = noise.get([noise_x + 10000.0, noise_y + i as f64 * 40000.0]) as f32;
+            let x = noise.get([noise_x, noise_y + i as f64 * 10000.0]) as f32 * 3.0;
+            let y = noise.get([noise_x + i as f64*1000.0, noise_y + i as f64 * 100000.0]) as f32 * 3.0;
+            draw.ellipse().x_y(x,y).wh((r, r2).into()).color(colors[i % colors.len()]);
+        }
+    };
+
+    while lx < win_rect.right() {
+        let mut ly = win_rect.bottom();
+        while ly < win_rect.top() {
+            let translation = Matrix4::from_translation((lx, ly, 0.0).into());
+            let rotation = Matrix4::from_angle_z(Rad(a));
+            let scale = Matrix4::from_nonuniform_scale(lattice_w, lattice_h, 1.0);
+            let reflectionm = Matrix4::new(
+                reflection, 0.0, 0.0, 0.0,
+                0.0, 1.0, 0.0, 0.0,
+                0.0, 0.0, 1.0, 0.0,
+                0.0, 0.0, 0.0, 1.0,
+            );
+            let draw = draw.transform(translation*scale*reflectionm*rotation);
+            object(draw);
+            ly += lattice_h;
+            a += std::f32::consts::PI/2.0;
+            reflection *= -1.0;
+        }
+        lx += lattice_w;
+    }
+
+
+    if app.elapsed_frames() >= period && app.elapsed_frames() <= period * 2{
+        let file_path = captured_frame_path(app, app.elapsed_frames() - period);
+        app.main_window().capture_frame(file_path);
+    }
     draw.to_frame(app, &frame).unwrap();
 }
