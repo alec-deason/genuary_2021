@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 nannou = "0.15.0"
+chull = "0.2.4"
 
 [profile.dev]
 opt-level = 3

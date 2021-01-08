@@ -6,7 +6,7 @@ use nannou::{
 };
 
 fn main() {
-    nannou::sketch(jan_06).run()
+    nannou::sketch(jan_07).run()
 }
 
 fn captured_frame_path(app: &App, num: u64) -> std::path::PathBuf {
@@ -269,4 +269,140 @@ fn jan_06(app: &App, frame: Frame) {
         app.main_window().capture_frame(file_path);
     }
     draw.to_frame(app, &frame).unwrap();
+}
+
+struct LoopingNoise {
+    noise_fn: Box<dyn NoiseFn<[f64; 2]>>,
+    period: u64,
+    radius: f64,
+    offset: Vector2,
+    frame: u64,
+}
+impl LoopingNoise {
+    pub fn new(frame: u64, period: u64, scale: f64, offset: Vector2) -> Self {
+        let mut fbm = Fbm::default();
+        fbm.persistence = 0.25;
+        Self {
+            noise_fn: Box::new(fbm),
+            period,
+            radius: (scale * period as f64) / (2.0 * std::f64::consts::PI),
+            offset,
+            frame
+        }
+    }
+
+    pub fn get(&self) -> f64 {
+        self.get_unique(0)
+    }
+
+    pub fn get_unique(&self, i: u64) -> f64 {
+        let noise_a = ((self.frame % self.period) as f64) / self.period as f64;
+        let noise_a = noise_a * std::f64::consts::PI*2.0;
+        let noise_x = noise_a.cos() * self.radius + self.offset.x as f64 + i as f64 * 10000.0;
+        let noise_y = noise_a.sin() * self.radius + self.offset.y as f64;
+        self.noise_fn.get([noise_x, noise_y])
+    }
+}
+
+use chull::{ConvexHull,ConvexHullWrapper};
+
+fn jan_07(app: &App, frame: Frame) {
+    let draw = app.draw();
+    draw.background().color(hsv(0.1, 0.1, 0.005));
+    let win_rect = app.window_rect();
+
+    let period = 60*10;
+
+
+    let noise = LoopingNoise::new(frame.nth(), period, 0.0005, pt2(1000.0, 1000.0));
+
+    let object = |draw: Draw| {
+        let mut points = vec![];
+
+        for i in 0..3 {
+            points.push(pt2(noise.get_unique(i + 1000) as f32* 500.0, noise.get_unique(i+1000) as f32 * 500.0));
+        }
+        points.push(points[0]);
+        for l in points.windows(2) {
+            draw.line().start(l[0]).end(l[1]).weight(80.0).caps_round().rgb(1.0, 1.0, 1.0);
+        }
+        for l in points.windows(2) {
+            draw.line().start(l[0]).end(l[1]).weight(75.0).caps_round().rgb(0.1, 0.5, 0.1);
+        }
+    };
+
+    draw_lattice(app, &draw, 105.0, 105.0, object);
+
+    let noise = LoopingNoise::new(frame.nth(), period, 0.0005, pt2(1000.0, 0.0));
+
+    let object = |draw: Draw| {
+        let mut points = vec![];
+
+        for i in 0..3 {
+            points.push(pt2(noise.get_unique(i) as f32* 500.0, noise.get_unique(i+1000) as f32 * 500.0));
+        }
+        points.push(points[0]);
+        for l in points.windows(2) {
+            draw.line().start(l[0]).end(l[1]).weight(40.0).caps_round().rgb(1.0, 1.0, 1.0);
+        }
+        for l in points.windows(2) {
+            draw.line().start(l[0]).end(l[1]).weight(35.0).caps_round().rgb(0.5, 0.1, 0.1);
+        }
+    };
+
+    draw_lattice(app, &draw, 105.0, 105.0, object);
+
+    let noise = LoopingNoise::new(frame.nth(), period, 0.0025, pt2(0.0, 0.0));
+
+    let object = |draw: Draw| {
+        let mut points = vec![];
+
+        for i in 0..5 {
+            points.push(pt2(noise.get_unique(i) as f32* 200.0, noise.get_unique(i+100) as f32 * 200.0));
+        }
+        points.push(points[0]);
+        for l in points.windows(2) {
+            draw.line().start(l[0]).end(l[1]).weight(15.0).caps_round().rgb(1.0, 1.0, 1.0);
+        }
+        for l in points.windows(2) {
+            draw.line().start(l[0]).end(l[1]).weight(10.0).caps_round().rgb(0.1, 0.1, 0.5);
+        }
+    };
+
+    draw_lattice(app, &draw, 105.0, 105.0, object);
+
+    if app.elapsed_frames() >= period && app.elapsed_frames() < period * 2{
+        let file_path = captured_frame_path(app, app.elapsed_frames() - period);
+        app.main_window().capture_frame(file_path);
+    }
+    draw.to_frame(app, &frame).unwrap();
+}
+
+fn draw_lattice(app: &App, draw: &Draw, lattice_w: f32, lattice_h: f32, mut object: impl FnMut(Draw)) {
+    let win_rect = app.window_rect();
+
+    let mut lx = win_rect.left();
+    let mut a = 0.0;
+    let mut reflection = 1.0;
+
+    while lx < win_rect.right() {
+        let mut ly = win_rect.bottom();
+        while ly < win_rect.top() {
+            let translation = Matrix4::from_translation((lx, ly, 0.0).into());
+            let rotation = Matrix4::from_angle_z(Rad(a));
+            let scale = Matrix4::from_nonuniform_scale(lattice_w/100.0, lattice_h/100.0, 1.0);
+            let reflectionm = Matrix4::new(
+                reflection, 0.0, 0.0, 0.0,
+                0.0, 1.0, 0.0, 0.0,
+                0.0, 0.0, 1.0, 0.0,
+                0.0, 0.0, 0.0, 1.0,
+            );
+            let draw = draw.transform(translation*scale*reflectionm*rotation);
+            object(draw);
+            ly += lattice_h;
+            a += std::f32::consts::PI/4.0;
+            reflection *= -1.0;
+        }
+        lx += lattice_w;
+    }
 }
