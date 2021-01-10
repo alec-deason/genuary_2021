@@ -6,7 +6,7 @@ use nannou::{
 };
 
 fn main() {
-    nannou::sketch(jan_08).run()
+    nannou::sketch(jan_09).run()
 }
 
 fn captured_frame_path(app: &App, num: u64) -> std::path::PathBuf {
@@ -493,12 +493,32 @@ fn draw_lattice2(app: &App, draw: &Draw, lattice_w: f32, lattice_h: f32, mut obj
         while ly < win_rect.top() {
             let translation = Matrix4::from_translation((lx, ly, 0.0).into());
             let rotation = Matrix4::from_angle_z(Rad(a));
-            let scale = Matrix4::from_nonuniform_scale(lattice_w/100.0, lattice_h/200.0, 1.0);
+            let scale = Matrix4::from_nonuniform_scale(lattice_w/200.0, lattice_h/200.0, 1.0);
             let inner_draw = draw.transform(translation*scale);
             object(inner_draw);
 
 
-            let translation = Matrix4::from_translation((lx+lattice_w, ly, 0.0).into());
+            let translation = Matrix4::from_translation((lx, ly+lattice_h/2.0, 0.0).into());
+            let reflection = Matrix4::new(
+                1.0, 0.0, 0.0, 0.0,
+                0.0, -1.0, 0.0, 0.0,
+                0.0, 0.0, 1.0, 0.0,
+                0.0, 0.0, 0.0, 1.0,
+            );
+            let inner_draw = draw.transform(translation*reflection*scale);
+            object(inner_draw);
+
+            let translation = Matrix4::from_translation((lx+lattice_w/2.0, ly, 0.0).into());
+            let reflection = Matrix4::new(
+                -1.0, 0.0, 0.0, 0.0,
+                0.0, 1.0, 0.0, 0.0,
+                0.0, 0.0, 1.0, 0.0,
+                0.0, 0.0, 0.0, 1.0,
+            );
+            let inner_draw = draw.transform(translation*reflection*scale);
+            object(inner_draw);
+
+            let translation = Matrix4::from_translation((lx+lattice_w/2.0, ly+lattice_h/2.0, 0.0).into());
             let reflection = Matrix4::new(
                 -1.0, 0.0, 0.0, 0.0,
                 0.0, -1.0, 0.0, 0.0,
@@ -512,4 +532,43 @@ fn draw_lattice2(app: &App, draw: &Draw, lattice_w: f32, lattice_h: f32, mut obj
         }
         lx += lattice_w;
     }
+}
+
+fn jan_09(app: &App, frame: Frame) {
+    let draw = app.draw();
+    draw.background().color(hsv(0.1, 0.1, 0.005));
+    let win_rect = app.window_rect();
+
+    let period = 60*10;
+
+
+    let pos_noise = LoopingNoise::new(frame.nth(), period, 0.005, pt2(1000.0, 1000.0));
+    let color_noise = LoopingNoise::new(frame.nth(), period, 0.0005, pt2(1000.0, 1000.0));
+
+    let colors:Vec<_> = (0..30).map(|i| {
+        let i = i * 3;
+        hsv(color_noise.get_unique(i) as f32 * 3.0, 1.0, 0.7)
+    }).collect();
+    let object = |draw: Draw| {
+        draw.polygon().points(vec![
+            [15.0, 150.0],
+            [85.0, 150.0],
+            [-50.0, 15.0],
+            [-50.0, 85.0],
+        ]).hsv(238.9/360.0, 1.0, 0.3);
+        draw.polygon().points(vec![
+            [25.0, 150.0],
+            [75.0, 150.0],
+            [-50.0, 30.0],
+            [-50.0, 80.0],
+        ]).hsv(238.9/360.0 + 0.5, 1.0, 0.3);
+    };
+
+    draw_lattice2(app, &draw, 75.0, 75.0, object);
+
+    if app.elapsed_frames() >= period && app.elapsed_frames() < period * 2{
+        let file_path = captured_frame_path(app, app.elapsed_frames() - period);
+        app.main_window().capture_frame(file_path);
+    }
+    draw.to_frame(app, &frame).unwrap();
 }
