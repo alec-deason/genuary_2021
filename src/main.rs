@@ -102,8 +102,11 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     draw.reset();
     let rect = Rect::from_wh([model.texture.size()[0] as f32, model.texture.size()[1] as f32].into());
 
-    let tile_w = rect.w() / 5.0;
-    let tile_h = rect.h() / 10.0;
+    let x_count = 8;
+    let y_count = 16;
+
+    let tile_w = rect.w() / x_count as f32;
+    let tile_h = rect.h() / y_count as f32;
     let draw = &model.draw;
     draw.reset();
     let rect = Rect::from_wh([model.texture.size()[0] as f32, model.texture.size()[1] as f32].into());;
@@ -114,37 +117,37 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     for i in 0..75 {
         let h = noise.get(i).powf(1.6);
         fb.insert(&Hue(i as i32, (h * 256.0).min(255.0) as u8));
-        colors.push(hsv(h, 1.0, 1.0));
+        colors.push(hsv(h, 1.0, h));
     }
 
     let mut ctl = Control::new(Default::default()).expect("Failed creating Control.");
     ctl.add("base", &[], &format!("c(0..{}).", colors.len()-1)).unwrap();
     ctl.add("base", &[], "1 {coloring(X,I) : c(I)} 1 :- v(X).").unwrap();
-    ctl.add("base", &[], "similar(I, J) :- |X - Y| < 40, hue(I, X), hue(J, Y).").unwrap();
-    ctl.add("base", &[], ":- coloring(X,I), coloring(Y,J), edge(X,Y), hue(I, U), hue(J, V), similar(I, J).").unwrap();
-    ctl.add("base", &[], ":- coloring(X,I), coloring(Y,J), diagonal(X,Y), hue(I, U), hue(J, V), -similar(I, J).").unwrap();
+    ctl.add("base", &[], "similar(I, J) :- |X - Y| < 120, hue(I, X), hue(J, Y).").unwrap();
+    ctl.add("base", &[], ":- coloring(X,I), coloring(Y,J), edge(X,Y), hue(I, U), hue(J, V), -similar(I, J).").unwrap();
+    ctl.add("base", &[], ":- coloring(X,I), coloring(Y,J), diagonal(X,Y), hue(I, U), hue(J, V), similar(I, J).").unwrap();
     //ctl.add("base", &[], ":- coloring(X,I), coloring(Y,I), edge(X,Y), c(I).").unwrap();
-    ctl.add("base", &[], "v(1..50).").unwrap();
+    ctl.add("base", &[], &format!("v(1..{}).", x_count*y_count)).unwrap();
 
-    for x in 0..5 {
-        for y in 0..10 {
-            let i = x + y * 5 + 1;
+    for x in 0..x_count {
+        for y in 0..y_count {
+            let i = x + y * x_count + 1;
             for (dx, dy) in &[(1,0), (-1,0), (0,1), (0,-1)] {
-                if x + dx >= 0 && x + dx < 5 {
-                    if y + dy >= 0 && y + dy < 10 {
+                if x + dx >= 0 && x + dx < x_count {
+                    if y + dy >= 0 && y + dy < y_count {
                         let x = x + dx;
                         let y = y + dy;
-                        let j = x + y * 5 + 1;
+                        let j = x + y * x_count + 1;
                         fb.insert(&Edge { a:i, b:j});
                     }
                 }
             }
             for (dx, dy) in &[(1,-1), (-1,1), (1,1), (-1,-1)] {
-                if x + dx >= 0 && x + dx < 5 {
-                    if y + dy >= 0 && y + dy < 10 {
+                if x + dx >= 0 && x + dx < x_count {
+                    if y + dy >= 0 && y + dy < y_count {
                         let x = x + dx;
                         let y = y + dy;
-                        let j = x + y * 5 + 1;
+                        let j = x + y * x_count + 1;
                         fb.insert(&Diagonal { a:i, b:j});
                     }
                 }
@@ -184,9 +187,9 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         }
     }
 
-    for x in 0..5 {
-        for y in 0..10 {
-            let i = x + y * 5 + 1;
+    for x in 0..x_count {
+        for y in 0..y_count {
+            let i = x + y * x_count + 1;
             let ci = colorings[&i];
             let color = colors[ci];
             draw.ellipse().w_h(tile_w, tile_h).x_y(x as f32 * tile_w - rect.w()/2.0 + tile_w/2.0, y as f32 * tile_h - rect.h()/2.0 + tile_h/2.0).color(color);
