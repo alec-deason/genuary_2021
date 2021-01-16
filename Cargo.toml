@@ -9,7 +9,7 @@ save_frames = []
 
 [dependencies]
 nannou = "0.15.0"
-chull = "0.2.4"
+clingo = { version = "0.6", features = ["derive"] }
 
 [profile.dev]
 opt-level = 3

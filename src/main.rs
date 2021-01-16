@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use nannou::{prelude::*, math::Matrix4, noise::{Fbm, NoiseFn}};
 use nannou::rand::{rngs::SmallRng, Rng, SeedableRng};
+use clingo::*;
 
 fn main() {
     nannou::app(model).update(update).exit(exit).run();
@@ -7,17 +9,14 @@ fn main() {
 
 struct Model {
     texture: wgpu::Texture,
-    texture2: wgpu::Texture,
     draw: nannou::Draw,
     renderer: nannou::draw::Renderer,
-    renderer2: nannou::draw::Renderer,
     noise: LoopingNoise,
     texture_capturer: wgpu::TextureCapturer,
 }
 
 fn model(app: &App) -> Model {
-    let texture_size = [500, 500];
-    let second_texture_size = [(texture_size[0]/1) * 1, (texture_size[1]/1) * 2];
+    let texture_size = [500, 800];
 
     let w_id = app
         .new_window()
@@ -37,19 +36,10 @@ fn model(app: &App) -> Model {
         .sample_count(sample_count)
         .format(wgpu::TextureFormat::Rgba16Float)
         .build(device);
-    let texture2 = wgpu::TextureBuilder::new()
-        .size(second_texture_size)
-        .usage(wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::SAMPLED)
-        .sample_count(sample_count)
-        .format(wgpu::TextureFormat::Rgba16Float)
-        .build(device);
 
     let draw = nannou::Draw::new();
     let descriptor = texture.descriptor();
     let renderer =
-        nannou::draw::RendererBuilder::new().build_from_texture_descriptor(device, descriptor);
-    let descriptor = texture2.descriptor();
-    let renderer2 =
         nannou::draw::RendererBuilder::new().build_from_texture_descriptor(device, descriptor);
 
    let texture_capturer = wgpu::TextureCapturer::default();
@@ -57,120 +47,162 @@ fn model(app: &App) -> Model {
 
     Model {
         texture,
-        texture2,
         draw,
         renderer,
-        renderer2,
         noise: LoopingNoise::new(60*10, 10, 300),
         texture_capturer,
     }
+}
+#[derive(ToSymbol)]
+struct Edge {
+    a: i32,
+    b: i32,
+}
+#[derive(ToSymbol)]
+struct Diagonal {
+    a: i32,
+    b: i32,
+}
+#[derive(ToSymbol)]
+struct Coloring(i32);
+#[derive(ToSymbol)]
+struct Hue(i32, u8);
+
+fn print_model(model: &clingo::Model) {
+    // retrieve the symbols in the model
+    let atoms = model
+        .symbols(ShowType::SHOWN)
+        .expect("Failed to retrieve symbols in the model.");
+
+    print!("Model:");
+
+    for atom in atoms {
+        // retrieve and print the symbol's string
+        print!(" {}", atom.to_string().unwrap());
+    }
+    println!();
 }
 
 fn update(app: &App, model: &mut Model, _update: Update) {
     let draw = &model.draw;
     draw.reset();
 
-    let [w, h] = model.texture.size();
-    let w = w as f32;
-    let h = h as f32;
 
-    let mut elapsed_frames = app.main_window().elapsed_frames() as i32;
-    elapsed_frames += 0;
-    let noise = model.noise.for_frame(elapsed_frames as u64);
-
-    draw.background().hsv(0.0, 1.0, 0.005);
-
-    let mut circles = vec![];
-    let hue = noise.get(3) as f32;
-    let poop = noise.get(5) as f32 - 0.7;
-    for i in 0..90 {
-        let r = (((elapsed_frames + i) as f32 + poop*200.0) % 90.0) as f32 / 90.0;
-        let r = r * w;
-        let v = (i % 30) as f32 / 30.0;
-        circles.push((r, v));
-    }
-    circles.sort_by_key(|(r, _)| -(r * 1000.0) as i32);
-    for (r, v) in circles {
-        draw.ellipse().w_h(r, r).x_y(0.0, 0.0).hsv(hue, 1.0, v);
-    }
-
-    // green boarder
-    let hue = noise.get(0) as f32;
-    let mut circles = vec![];
-    let poop = noise.get(6) as f32 - 0.7;
-    for i in 0..180 {
-        let r = (((elapsed_frames + i) as f32 + poop*200.0) % 180.0) as f32 / 180.0;
-        let r = r * w;
-        let v = (i % 30) as f32 / 30.0;
-        circles.push((r, v));
-    }
-    circles.sort_by_key(|(r, _)| -(r * 1000.0) as i32);
-    for (r, v) in circles {
-        draw.ellipse().w_h(r * 1.4, r * 1.4).x_y(w, 0.0).hsv(hue, 1.0, v);
-        draw.ellipse().w_h(r * 1.4, r * 1.4).x_y(-w, 0.0).hsv(hue, 1.0, v);
-        draw.ellipse().w_h(r * 1.4, r * 1.4).x_y(0.0, h).hsv(hue, 1.0, v);
-        draw.ellipse().w_h(r * 1.4, r * 1.4).x_y(0.0, -h).hsv(hue, 1.0, v);
-    }
-
-    let mut circles = vec![];
-    let poop = noise.get(6) as f32 - 0.7;
-    for i in 0..180 {
-        let r = (((elapsed_frames + i) as f32 + poop*200.0) % 180.0) as f32 / 180.0;
-        let r = r * w;
-        let v = (i % 30) as f32 / 30.0;
-        circles.push((r, v));
-    }
-    circles.sort_by_key(|(r, _)| -(r * 1000.0) as i32);
-    let hue = noise.get(1) as f32;
-    for (r, v) in circles {
-        draw.ellipse().w_h(r * 1.3, r * 1.3).x_y(w, 0.0).hsv(hue, 1.0, v);
-        draw.ellipse().w_h(r * 1.3, r * 1.3).x_y(-w, 0.0).hsv(hue, 1.0, v);
-        draw.ellipse().w_h(r * 1.3, r * 1.3).x_y(0.0, h).hsv(hue, 1.0, v);
-        draw.ellipse().w_h(r * 1.3, r * 1.3).x_y(0.0, -h).hsv(hue, 1.0, v);
-    }
-
-
-    /*
-    let n = 6;
-    for i in 0..30 {
-        let d1 = noise.get(i * n + 0).max(0.0).min(1.0).powf(1.5) as f32 * w as f32 * 2.0;
-        let d2 = noise.get(i * n + 5).max(0.0).min(1.0).powf(1.5) as f32 * w as f32 * 2.0;
-        let d2 = d2*0.5 + d1*0.5;
-        let r2 = noise.get(i * n + 1).max(0.0).min(1.0) as f32 * w as f32;
-        let a = noise.get(i * n + 2) * std::f32::consts::PI * 2.0;
-        let a2 = noise.get(i * n + 6) * std::f32::consts::PI * 2.0;
-        let h = noise.get(i * n + 3) as f32;
-        let v = noise.get(i * n + 4).powf(1.25);
-        draw.rotate(a2).ellipse().w_h(d1, d2).x_y(a.cos()*r2, a.sin()*r2).hsv(h, 1.0, v);
-    }
-    */
+    let mut elapsed_frames = app.main_window().elapsed_frames();
 
     let window = app.main_window();
     let device = window.swap_chain_device();
     let ce_desc = wgpu::CommandEncoderDescriptor {
         label: Some("texture renderer"),
     };
+
+    let noise = model.noise.for_frame(elapsed_frames);
+
+    let draw = &model.draw;
+    draw.reset();
+    let rect = Rect::from_wh([model.texture.size()[0] as f32, model.texture.size()[1] as f32].into());
+
+    let tile_w = rect.w() / 5.0;
+    let tile_h = rect.h() / 10.0;
+    let draw = &model.draw;
+    draw.reset();
+    let rect = Rect::from_wh([model.texture.size()[0] as f32, model.texture.size()[1] as f32].into());;
+
+
+    let mut  fb = FactBase::new();
+    let mut colors = vec![];
+    for i in 0..75 {
+        let h = noise.get(i).powf(1.6);
+        fb.insert(&Hue(i as i32, (h * 256.0).min(255.0) as u8));
+        colors.push(hsv(h, 1.0, 1.0));
+    }
+
+    let mut ctl = Control::new(Default::default()).expect("Failed creating Control.");
+    ctl.add("base", &[], &format!("c(0..{}).", colors.len()-1)).unwrap();
+    ctl.add("base", &[], "1 {coloring(X,I) : c(I)} 1 :- v(X).").unwrap();
+    ctl.add("base", &[], "similar(I, J) :- |X - Y| < 40, hue(I, X), hue(J, Y).").unwrap();
+    ctl.add("base", &[], ":- coloring(X,I), coloring(Y,J), edge(X,Y), hue(I, U), hue(J, V), similar(I, J).").unwrap();
+    ctl.add("base", &[], ":- coloring(X,I), coloring(Y,J), diagonal(X,Y), hue(I, U), hue(J, V), -similar(I, J).").unwrap();
+    //ctl.add("base", &[], ":- coloring(X,I), coloring(Y,I), edge(X,Y), c(I).").unwrap();
+    ctl.add("base", &[], "v(1..50).").unwrap();
+
+    for x in 0..5 {
+        for y in 0..10 {
+            let i = x + y * 5 + 1;
+            for (dx, dy) in &[(1,0), (-1,0), (0,1), (0,-1)] {
+                if x + dx >= 0 && x + dx < 5 {
+                    if y + dy >= 0 && y + dy < 10 {
+                        let x = x + dx;
+                        let y = y + dy;
+                        let j = x + y * 5 + 1;
+                        fb.insert(&Edge { a:i, b:j});
+                    }
+                }
+            }
+            for (dx, dy) in &[(1,-1), (-1,1), (1,1), (-1,-1)] {
+                if x + dx >= 0 && x + dx < 5 {
+                    if y + dy >= 0 && y + dy < 10 {
+                        let x = x + dx;
+                        let y = y + dy;
+                        let j = x + y * 5 + 1;
+                        fb.insert(&Diagonal { a:i, b:j});
+                    }
+                }
+            }
+        }
+    }
+    ctl.add_facts(&fb);
+    let fb = FactBase::new();
+    let part = Part::new("base", &[]).unwrap();
+    let parts = vec![part];
+    ctl.ground(&parts).unwrap();
+
+    let mut handle = ctl
+        .solve(SolveMode::YIELD, &[])
+        .expect("Failed retrieving solve handle.");
+    let mut colorings = HashMap::new();
+    loop {
+        handle.resume().expect("Failed resume on solve handle.");
+        match handle.model() {
+            // print the model
+            Ok(Some(model)) => {
+                for atom in model.symbols(ShowType::SHOWN).unwrap() {
+                    if atom.name().unwrap() == "coloring" {
+                        let args = atom.arguments().unwrap();
+                        let a = args.get(0).unwrap().number().unwrap();
+                        let b = args.get(1).unwrap().number().unwrap();
+                        println!("from model: {} {}", a, b);
+                        colorings.insert(a, b as usize);
+                    } else {
+                        println!("{:?}", atom.name());
+                    }
+                }
+            },
+            // stop if there are no more models
+            Ok(None) => break,
+            Err(e) => panic!("Error: {}", e),
+        }
+    }
+
+    for x in 0..5 {
+        for y in 0..10 {
+            let i = x + y * 5 + 1;
+            let ci = colorings[&i];
+            let color = colors[ci];
+            draw.ellipse().w_h(tile_w, tile_h).x_y(x as f32 * tile_w - rect.w()/2.0 + tile_w/2.0, y as f32 * tile_h - rect.h()/2.0 + tile_h/2.0).color(color);
+        }
+    }
+
     let mut encoder = device.create_command_encoder(&ce_desc);
     model
         .renderer
         .render_to_texture(device, &mut encoder, draw, &model.texture);
-
     window.swap_chain_queue().submit(&[encoder.finish()]);
-
-    if cfg!(feature = "save_frames") && (elapsed_frames as u64) < model.noise.period {
-
-        let draw = &model.draw;
-        draw.reset();
-        let rect = Rect::from_wh([model.texture2.size()[0] as f32, model.texture2.size()[1] as f32].into());
-        draw_lattice(model, rect, draw.clone());
-
+    if cfg!(feature = "save_frames") && elapsed_frames < model.noise.period {
         let mut encoder = device.create_command_encoder(&ce_desc);
-        model
-            .renderer
-            .render_to_texture(device, &mut encoder, draw, &model.texture2);
         let snapshot = model
                  .texture_capturer
-                          .capture(device, &mut encoder, &model.texture2);
+                          .capture(device, &mut encoder, &model.texture);
         window.swap_chain_queue().submit(&[encoder.finish()]);
 
         let path = capture_directory(app)
@@ -192,39 +224,9 @@ fn view(app: &App, model: &Model, frame: Frame) {
 
     let window_rect = app.window_rect();
 
-    draw_lattice(model, window_rect, draw.clone());
+    draw.texture(&model.texture);
 
     draw.to_frame(app, &frame).unwrap();
-}
-
-fn draw_lattice(model: &Model, rect: Rect, draw: Draw) {
-    draw.background().color(BLUE);
-    let [w, h] = model.texture.size();
-    let scale = 1.0;
-    let hw = w as f32/(scale*2.0);
-    let w = w as f32/scale;
-    let hh = h as f32/(scale*2.0);
-    let h = h as f32/scale;
-    let mut lx = rect.left() + hw/2.0;
-
-    while lx < rect.right() + w {
-        let mut ly = rect.bottom() + hh/2.0;
-        while ly < rect.top() + h {
-            let inner_draw = draw.translate((lx, ly).into());
-            inner_draw.texture(&model.texture).w_h(hw, hh);
-            let mut a = std::f32::consts::PI/2.0;
-            let inner_draw = draw.translate((lx + hw, ly).into()).rotate(a);
-            inner_draw.texture(&model.texture).w_h(hw, hh);
-            a += std::f32::consts::PI/2.0;
-            let inner_draw = draw.translate((lx + hw, ly + hh).into()).rotate(a);
-            inner_draw.texture(&model.texture).w_h(hw, hh);
-            a += std::f32::consts::PI/2.0;
-            let inner_draw = draw.translate((lx, ly + hh).into()).rotate(a);
-            inner_draw.texture(&model.texture).w_h(hw, hh);
-            ly += h;
-        }
-        lx += w;
-    }
 }
 
 fn exit(app: &App, model: Model) {
