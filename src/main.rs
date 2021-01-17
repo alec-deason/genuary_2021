@@ -113,9 +113,15 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
 
     let mut  fb = FactBase::new();
-    let mut colors = vec![];
+    let mut hues = vec![];
     for i in 0..75 {
         let h = noise.get(i).powf(1.6);
+        hues.push(h);
+    }
+    hues.sort_by_key(|h| (h*1000.0) as i32);
+    let mut colors = vec![];
+    let median = (hues[hues.len()/2]* 256.0).min(255.0) as u8;
+    for (i, h) in hues.into_iter().enumerate() {
         fb.insert(&Hue(i as i32, (h * 256.0).min(255.0) as u8));
         colors.push(hsv(h, 1.0, h));
     }
@@ -123,9 +129,12 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     let mut ctl = Control::new(Default::default()).expect("Failed creating Control.");
     ctl.add("base", &[], &format!("c(0..{}).", colors.len()-1)).unwrap();
     ctl.add("base", &[], "1 {coloring(X,I) : c(I)} 1 :- v(X).").unwrap();
+    ctl.add("base", &[], &format!("boring(I) :- |X - {}| < 50, hue(I, X).", median)).unwrap();
     ctl.add("base", &[], "similar(I, J) :- |X - Y| < 120, hue(I, X), hue(J, Y).").unwrap();
-    ctl.add("base", &[], ":- coloring(X,I), coloring(Y,J), edge(X,Y), hue(I, U), hue(J, V), -similar(I, J).").unwrap();
-    ctl.add("base", &[], ":- coloring(X,I), coloring(Y,J), diagonal(X,Y), hue(I, U), hue(J, V), similar(I, J).").unwrap();
+    ctl.add("base", &[], "spicy(X) :- edge(X, Y), coloring(Y, I), boring(I), v(X), v(Y).").unwrap();
+    ctl.add("base", &[], ":- coloring(X, I), spicy(X), boring(I), v(X).").unwrap();
+    ctl.add("base", &[], &format!(":- coloring(X,I), |X - {}| < 10, v(X), -boring(I).", elapsed_frames as i32 % (x_count as i32 *y_count as i32))).unwrap();
+    ctl.add("base", &[], &format!(":- coloring(X,I), |X - {}| > 10, v(X), boring(I).", elapsed_frames as i32 % (x_count as i32 *y_count as i32))).unwrap();
     //ctl.add("base", &[], ":- coloring(X,I), coloring(Y,I), edge(X,Y), c(I).").unwrap();
     ctl.add("base", &[], &format!("v(1..{}).", x_count*y_count)).unwrap();
 
@@ -177,7 +186,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
                         println!("from model: {} {}", a, b);
                         colorings.insert(a, b as usize);
                     } else {
-                        println!("{:?}", atom.name());
+                        //println!("{:?}", atom.name());
                     }
                 }
             },
