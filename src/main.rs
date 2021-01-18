@@ -1,7 +1,10 @@
 use std::collections::HashMap;
+use rayon::prelude::*;
+
 use nannou::{prelude::*, math::Matrix4, noise::{Fbm, NoiseFn}};
-use nannou::rand::{rngs::SmallRng, Rng, SeedableRng};
-use clingo::*;
+use nannou::rand::{rngs::SmallRng, Rng, SeedableRng, prelude::*};
+
+mod ca;
 
 fn main() {
     nannou::app(model).update(update).exit(exit).run();
@@ -13,6 +16,8 @@ struct Model {
     renderer: nannou::draw::Renderer,
     noise: LoopingNoise,
     texture_capturer: wgpu::TextureCapturer,
+    ca_model: ca::Model,
+    colors: Vec<Hsv>,
 }
 
 fn model(app: &App) -> Model {
@@ -45,42 +50,70 @@ fn model(app: &App) -> Model {
    let texture_capturer = wgpu::TextureCapturer::default();
    std::fs::create_dir_all(&capture_directory(app)).unwrap();
 
+   let mut rng = thread_rng();
+
+   let mut models = vec![];
+   for _ in 0..20 {
+       let rule_count = rng.gen_range(3, 10);
+       let state_count = rng.gen_range(2,6);
+       models.push(ca::Model::new_random(25, 40, rule_count, state_count, &mut rng));
+   }
+   let mut best_score = 0.0;
+   let mut best_model = models[0].clone();
+   for _ in 0..20 {
+       let stats:Vec<_> = models.par_iter_mut().map(|m| {
+           m.step_for(500);
+           let stats = m.stats();
+           stats.path_score
+       }).collect();
+       let mut new_models:Vec<_> = models.drain(..).zip(stats.into_iter()).collect();
+       new_models.sort_by_key(|(_, s)| (s * 100.0) as i32);
+       new_models.reverse();
+       println!("best of generation: {}", new_models[0].1);
+       if new_models[0].1 > best_score {
+           best_score = new_models[0].1;
+           best_model = new_models[0].0.clone();
+       }
+       /*
+       if new_models[0].1 < 5.0 {
+           chosen_model = Some(new_models[0].0.clone());
+           break
+       }
+       */
+       let count = new_models.len()/4;
+       models.extend(new_models.into_iter().take(count).map(|(mut m, _)| { m.reset_random(&mut rng); m}));
+       for _ in 0..3 {
+           let mut m = best_model.clone();
+            m.mutate(&mut rng);
+            models.push(m);
+       }
+       for i in 0..models.len() {
+           let mut m = models[i].clone();
+            m.mutate(&mut rng);
+            models.push(m);
+       }
+       while models.len() < 8 {
+           let rule_count = rng.gen_range(3, 10);
+           let state_count = rng.gen_range(2,6);
+           models.push(ca::Model::new_random(25, 40, rule_count, state_count, &mut rng));
+       }
+   }
+   println!("chosen model: {} {}", best_model.rule_count(), best_model.state_count());
+   best_model.reset();
+
+   let mut colors:Vec<_> = (0..best_model.state_count()).map(|i| hsv(i as f32 / best_model.state_count() as f32, 1.0, 1.0 - i as f32 / best_model.state_count() as f32)).collect();
+   colors.shuffle(&mut rng);
+   println!("{:?}", colors);
+
     Model {
         texture,
         draw,
         renderer,
         noise: LoopingNoise::new(60*10, 10, 300),
         texture_capturer,
+        ca_model: best_model,
+        colors,
     }
-}
-#[derive(ToSymbol)]
-struct Edge {
-    a: i32,
-    b: i32,
-}
-#[derive(ToSymbol)]
-struct Diagonal {
-    a: i32,
-    b: i32,
-}
-#[derive(ToSymbol)]
-struct Coloring(i32);
-#[derive(ToSymbol)]
-struct Hue(i32, u8);
-
-fn print_model(model: &clingo::Model) {
-    // retrieve the symbols in the model
-    let atoms = model
-        .symbols(ShowType::SHOWN)
-        .expect("Failed to retrieve symbols in the model.");
-
-    print!("Model:");
-
-    for atom in atoms {
-        // retrieve and print the symbol's string
-        print!(" {}", atom.to_string().unwrap());
-    }
-    println!();
 }
 
 fn update(app: &App, model: &mut Model, _update: Update) {
@@ -89,6 +122,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
 
     let mut elapsed_frames = app.main_window().elapsed_frames();
+    model.ca_model.step();
 
     let window = app.main_window();
     let device = window.swap_chain_device();
@@ -102,108 +136,19 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     draw.reset();
     let rect = Rect::from_wh([model.texture.size()[0] as f32, model.texture.size()[1] as f32].into());
 
-    let x_count = 8;
-    let y_count = 16;
 
-    let tile_w = rect.w() / x_count as f32;
-    let tile_h = rect.h() / y_count as f32;
-    let draw = &model.draw;
-    draw.reset();
-    let rect = Rect::from_wh([model.texture.size()[0] as f32, model.texture.size()[1] as f32].into());;
-
-
-    let mut  fb = FactBase::new();
-    let mut hues = vec![];
-    for i in 0..75 {
-        let h = noise.get(i).powf(1.6);
-        hues.push(h);
-    }
-    hues.sort_by_key(|h| (h*1000.0) as i32);
-    let mut colors = vec![];
-    let median = (hues[hues.len()/2]* 256.0).min(255.0) as u8;
-    for (i, h) in hues.into_iter().enumerate() {
-        fb.insert(&Hue(i as i32, (h * 256.0).min(255.0) as u8));
-        colors.push(hsv(h, 1.0, h));
+    for (i, s) in model.ca_model.states().iter().enumerate() {
+        let x = i % 25;
+        let y = i / 25;
+        draw.rect().w_h(20.0, 20.0).x_y(x as f32 * 20.0 - 250.0 + 10.0, y as f32 * 20.0 - 400.0 + 10.0).color(hsv(0.0, 1.0, 0.01));
+        let mut color = model.colors[*s as usize];
+        draw.rect().w_h(16.0, 16.0).x_y(x as f32 * 20.0 - 250.0 + 10.0, y as f32 * 20.0 - 400.0 + 10.0).color(color);
+        color.hue += 180.0;
+        color.value = 0.2;
+        draw.rect().w_h(10.0, 10.0).x_y(x as f32 * 20.0 - 250.0 + 10.0, y as f32 * 20.0 - 400.0 + 10.0).color(color);
     }
 
-    let mut ctl = Control::new(Default::default()).expect("Failed creating Control.");
-    ctl.add("base", &[], &format!("c(0..{}).", colors.len()-1)).unwrap();
-    ctl.add("base", &[], "1 {coloring(X,I) : c(I)} 1 :- v(X).").unwrap();
-    ctl.add("base", &[], &format!("boring(I) :- |X - {}| < 50, hue(I, X).", median)).unwrap();
-    ctl.add("base", &[], "similar(I, J) :- |X - Y| < 120, hue(I, X), hue(J, Y).").unwrap();
-    ctl.add("base", &[], "spicy(X) :- edge(X, Y), coloring(Y, I), boring(I), v(X), v(Y).").unwrap();
-    ctl.add("base", &[], ":- coloring(X, I), spicy(X), boring(I), v(X).").unwrap();
-    ctl.add("base", &[], &format!(":- coloring(X,I), |X - {}| < 10, v(X), -boring(I).", elapsed_frames as i32 % (x_count as i32 *y_count as i32))).unwrap();
-    ctl.add("base", &[], &format!(":- coloring(X,I), |X - {}| > 10, v(X), boring(I).", elapsed_frames as i32 % (x_count as i32 *y_count as i32))).unwrap();
-    //ctl.add("base", &[], ":- coloring(X,I), coloring(Y,I), edge(X,Y), c(I).").unwrap();
-    ctl.add("base", &[], &format!("v(1..{}).", x_count*y_count)).unwrap();
 
-    for x in 0..x_count {
-        for y in 0..y_count {
-            let i = x + y * x_count + 1;
-            for (dx, dy) in &[(1,0), (-1,0), (0,1), (0,-1)] {
-                if x + dx >= 0 && x + dx < x_count {
-                    if y + dy >= 0 && y + dy < y_count {
-                        let x = x + dx;
-                        let y = y + dy;
-                        let j = x + y * x_count + 1;
-                        fb.insert(&Edge { a:i, b:j});
-                    }
-                }
-            }
-            for (dx, dy) in &[(1,-1), (-1,1), (1,1), (-1,-1)] {
-                if x + dx >= 0 && x + dx < x_count {
-                    if y + dy >= 0 && y + dy < y_count {
-                        let x = x + dx;
-                        let y = y + dy;
-                        let j = x + y * x_count + 1;
-                        fb.insert(&Diagonal { a:i, b:j});
-                    }
-                }
-            }
-        }
-    }
-    ctl.add_facts(&fb);
-    let fb = FactBase::new();
-    let part = Part::new("base", &[]).unwrap();
-    let parts = vec![part];
-    ctl.ground(&parts).unwrap();
-
-    let mut handle = ctl
-        .solve(SolveMode::YIELD, &[])
-        .expect("Failed retrieving solve handle.");
-    let mut colorings = HashMap::new();
-    loop {
-        handle.resume().expect("Failed resume on solve handle.");
-        match handle.model() {
-            // print the model
-            Ok(Some(model)) => {
-                for atom in model.symbols(ShowType::SHOWN).unwrap() {
-                    if atom.name().unwrap() == "coloring" {
-                        let args = atom.arguments().unwrap();
-                        let a = args.get(0).unwrap().number().unwrap();
-                        let b = args.get(1).unwrap().number().unwrap();
-                        println!("from model: {} {}", a, b);
-                        colorings.insert(a, b as usize);
-                    } else {
-                        //println!("{:?}", atom.name());
-                    }
-                }
-            },
-            // stop if there are no more models
-            Ok(None) => break,
-            Err(e) => panic!("Error: {}", e),
-        }
-    }
-
-    for x in 0..x_count {
-        for y in 0..y_count {
-            let i = x + y * x_count + 1;
-            let ci = colorings[&i];
-            let color = colors[ci];
-            draw.ellipse().w_h(tile_w, tile_h).x_y(x as f32 * tile_w - rect.w()/2.0 + tile_w/2.0, y as f32 * tile_h - rect.h()/2.0 + tile_h/2.0).color(color);
-        }
-    }
 
     let mut encoder = device.create_command_encoder(&ce_desc);
     model
