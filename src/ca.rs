@@ -71,7 +71,7 @@ enum Neighborhood {
 
 impl Neighborhood {
     fn new_random<R: Rng>(rng: &mut R) -> Self {
-        let distance = rng.gen_range(1, 4);
+        let distance = rng.gen_range(1, 14);
         //*[Neighborhood::VonNeuman, Neighborhood::Conway, Neighborhood::ManhattanDistance(distance)].choose(rng).unwrap()
         Neighborhood::ManhattanDistance(distance)
     }
@@ -288,27 +288,42 @@ impl Model {
 
         let mut rng = thread_rng();
 
-        let path_length = 16;
+        let path_length = 4;
         let mut path_score = 0.0;
         let mut samples = 0;
-        for frame in (0..self.frames.len()-path_length).choose_multiple(&mut rng, 100) {
+        let mut changes = 0;
+        let mut visited = HashSet::new();
+        for frame in (10..self.frames.len()-path_length-10).choose_multiple(&mut rng, 100) {
             for i in (0..self.state.len()).choose_multiple(&mut rng, 100) {
+                if self.frames[frame][i] != self.frames[frame+1][i] {
+                    changes += 1;
+                }
+                visited.clear();
                 let mut velocity = (0,0);
                 samples += 1;
                 let mut loc = i as u32;
+                visited.insert(loc);
 
                 let state = self.frames[frame][i];
                 for d in 1..path_length {
-                    if self.frames[frame+d][i as usize] == state {
+                    /*
+                    if self.frames[frame+d][loc as usize] == state {
                         break
                     }
+                    */
                     let mut found = false;
                     for j in Neighborhood::Conway.neighbors(loc as u32, self.size) {
-                        if self.frames[frame+d][j as usize] == state {
+                        /*
+                        if visited.contains(&j) {
+                            continue
+                        }
+                        */
+                        if self.frames[frame+d][j as usize] == state && self.frames[frame+d-1][j as usize] != state {
                             found = true;
-                            velocity.0 += loc % self.size.0 - j % self.size.0;
-                            velocity.1 += loc / self.size.0 - j / self.size.0;
+                            velocity.0 += (loc % self.size.0) as i32 - (j % self.size.0) as i32;
+                            velocity.1 += (loc / self.size.0) as i32 - (j / self.size.0) as i32;
                             loc = j;
+                            visited.insert(j);
                             break
                         }
                     }
@@ -316,13 +331,14 @@ impl Model {
                         break
                     }
                 }
-                path_score += (velocity.0.pow(2) + velocity.1.pow(2)) as f32 / path_length as f32;
+                path_score += ((velocity.0.pow(2) + velocity.1.pow(2)) as f32).sqrt() / path_length as f32;
             }
         }
         path_score /= samples as f32;
         Stats {
             time_in_state,
             path_score,
+            change_score: changes as f32 / (100.0*100.0)
         }
     }
 }
@@ -330,4 +346,5 @@ impl Model {
 pub struct Stats {
     pub time_in_state: f32,
     pub path_score: f32,
+    pub change_score: f32,
 }

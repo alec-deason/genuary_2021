@@ -53,18 +53,21 @@ fn model(app: &App) -> Model {
    let mut rng = thread_rng();
 
    let mut models = vec![];
-   for _ in 0..20 {
+   for _ in 0..10 {
        let rule_count = rng.gen_range(3, 10);
        let state_count = rng.gen_range(2,6);
        models.push(ca::Model::new_random(25, 40, rule_count, state_count, &mut rng));
    }
    let mut best_score = 0.0;
    let mut best_model = models[0].clone();
-   for _ in 0..20 {
-       let stats:Vec<_> = models.par_iter_mut().map(|m| {
-           m.step_for(500);
+   for _ in 0..50 {
+       let count = models.len() as f32;
+       let stats:Vec<_> = models.par_iter_mut().enumerate().map(|(i, m)| {
+           let t = 1.0 - i as f32 / count;
+           m.step_for((500.0 * t.powf(2.0)).max(75.0) as usize);
            let stats = m.stats();
-           stats.path_score
+           //stats.path_score * 20.0 -(stats.change_score - 0.2).abs()
+           stats.path_score.powf(2.0)
        }).collect();
        let mut new_models:Vec<_> = models.drain(..).zip(stats.into_iter()).collect();
        new_models.sort_by_key(|(_, s)| (s * 100.0) as i32);
@@ -85,6 +88,7 @@ fn model(app: &App) -> Model {
        for _ in 0..3 {
            let mut m = best_model.clone();
             m.mutate(&mut rng);
+            m.reset_random(&mut rng);
             models.push(m);
        }
        for i in 0..models.len() {
@@ -101,7 +105,7 @@ fn model(app: &App) -> Model {
    println!("chosen model: {} {}", best_model.rule_count(), best_model.state_count());
    best_model.reset();
 
-   let mut colors:Vec<_> = (0..best_model.state_count()).map(|i| hsv(i as f32 / best_model.state_count() as f32, 1.0, 1.0 - i as f32 / best_model.state_count() as f32)).collect();
+   let mut colors:Vec<_> = (0..best_model.state_count()).map(|i| hsv(i as f32 / best_model.state_count() as f32, 1.0, 1.0 - i as f32 / (best_model.state_count() + 1) as f32)).collect();
    colors.shuffle(&mut rng);
    println!("{:?}", colors);
 
@@ -143,8 +147,8 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         draw.rect().w_h(20.0, 20.0).x_y(x as f32 * 20.0 - 250.0 + 10.0, y as f32 * 20.0 - 400.0 + 10.0).color(hsv(0.0, 1.0, 0.01));
         let mut color = model.colors[*s as usize];
         draw.rect().w_h(16.0, 16.0).x_y(x as f32 * 20.0 - 250.0 + 10.0, y as f32 * 20.0 - 400.0 + 10.0).color(color);
-        color.hue += 180.0;
-        color.value = 0.2;
+        color.hue += 18.0;
+        color.value = 0.4;
         draw.rect().w_h(10.0, 10.0).x_y(x as f32 * 20.0 - 250.0 + 10.0, y as f32 * 20.0 - 400.0 + 10.0).color(color);
     }
 
