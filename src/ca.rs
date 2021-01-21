@@ -15,11 +15,17 @@ struct Rule {
 impl Rule {
     fn new_random<R: Rng>(state_count: u32, rng: &mut R) -> Self {
         let neighborhood = Neighborhood::new_random(rng);
+        let current = State(rng.gen_range(0, state_count));
+        let target = if rng.gen::<f32>() > 0.5 {
+            (current.0 as i32-1).max(0) as u32
+        } else {
+            current.0 + 1
+        };
         Self {
             neighborhood,
-            current: State(rng.gen_range(0, state_count)),
+            current,
             state_of_interest: State(rng.gen_range(0, state_count)),
-            target: rng.gen_range(0, neighborhood.max_count()),
+            target,
             comparison: Comparison::new_random(neighborhood.max_count(), rng),
             result: State(rng.gen_range(0, state_count)),
         }
