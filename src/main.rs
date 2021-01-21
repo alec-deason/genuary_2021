@@ -16,7 +16,8 @@ struct Model {
     renderer: nannou::draw::Renderer,
     noise: LoopingNoise,
     texture_capturer: wgpu::TextureCapturer,
-    ca_model: ca::Model,
+    model: HashMap<(usize, usize), f32>,
+    dots: Vec<(f32, f32, f32, f32, usize)>,
     colors: Vec<Hsv>,
 }
 
@@ -52,62 +53,19 @@ fn model(app: &App) -> Model {
 
    let mut rng = thread_rng();
 
-   let mut models = vec![];
-   for _ in 0..10 {
-       let rule_count = rng.gen_range(12, 2200);
-       let state_count = rng.gen_range(10,26);
-       models.push(ca::Model::new_random(25, 40, rule_count, state_count, &mut rng));
-   }
-   let mut best_score = 0.0;
-   let mut best_model = models[0].clone();
-   for _ in 0..5 {
-       let count = models.len() as f32;
-       let stats:Vec<_> = models.par_iter_mut().enumerate().map(|(i, m)| {
-           let t = 1.0 - i as f32 / count;
-           m.step_for((500.0 * t.powf(2.0)).max(75.0) as usize);
-           let stats = m.stats();
-           //stats.path_score * 20.0 -(stats.change_score - 0.2).abs()
-           -(stats.change_score - 0.1).abs()
-       }).collect();
-       let mut new_models:Vec<_> = models.drain(..).zip(stats.into_iter()).collect();
-       new_models.sort_by_key(|(_, s)| (s * 100.0) as i32);
-       new_models.reverse();
-       println!("best of generation: {}", new_models[0].1);
-       if new_models[0].1 > best_score {
-           best_score = new_models[0].1;
-           best_model = new_models[0].0.clone();
-       }
-       /*
-       if new_models[0].1 < 5.0 {
-           chosen_model = Some(new_models[0].0.clone());
-           break
-       }
-       */
-       break;
-       let count = new_models.len()/4;
-       models.extend(new_models.into_iter().take(count).map(|(mut m, _)| { m.reset_random(&mut rng); m}));
-       for _ in 0..3 {
-           let mut m = best_model.clone();
-            m.mutate(&mut rng);
-            m.reset_random(&mut rng);
-            models.push(m);
-       }
-       for i in 0..models.len() {
-           let mut m = models[i].clone();
-            m.mutate(&mut rng);
-            models.push(m);
-       }
-       while models.len() < 8 {
-           let rule_count = rng.gen_range(3, 10);
-           let state_count = rng.gen_range(2,6);
-           models.push(ca::Model::new_random(25, 40, rule_count, state_count, &mut rng));
+   let mut model = HashMap::new();
+   let color_count = 10;
+   for a in 0..color_count {
+       for b in 0..color_count {
+           model.insert((a, b), (rng.gen::<f32>()-0.5) * 2.0);
        }
    }
-   println!("chosen model: {} {}", best_model.rule_count(), best_model.state_count());
-   best_model.reset();
+   let dots:Vec<_> = (0..1000).map(|_| (rng.gen_range(0.0, 500.0), rng.gen_range(0.0, 800.0), 0.0, 0.0, rng.gen_range(0, color_count))).collect();
 
-   let mut colors:Vec<_> = (0..best_model.state_count()).map(|i| hsv(i as f32 / best_model.state_count() as f32, 1.0, 1.0 - i as f32 / (best_model.state_count() + 1) as f32)).collect();
-   colors.shuffle(&mut rng);
+
+
+   let mut colors:Vec<_> = (0..color_count).map(|i| hsv(i as f32 / color_count as f32, 1.0, 1.0 - i as f32 / (color_count + 1) as f32)).collect();
+   //colors.shuffle(&mut rng);
    println!("{:?}", colors);
 
     Model {
@@ -116,7 +74,8 @@ fn model(app: &App) -> Model {
         renderer,
         noise: LoopingNoise::new(60*10, 10, 300),
         texture_capturer,
-        ca_model: best_model,
+        model: model,
+        dots,
         colors,
     }
 }
@@ -127,7 +86,31 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
 
     let mut elapsed_frames = app.main_window().elapsed_frames();
-    model.ca_model.step();
+    let mut forces = Vec::with_capacity(model.dots.len());
+    for (i, (x, y, _, _, c)) in model.dots.iter().enumerate() {
+        let mut fx = 0.0;
+        let mut fy = 0.0;
+        for (j, (xx, yy, _, _, cc)) in model.dots.iter().enumerate() {
+            if xx == x && yy == y {
+                continue
+            }
+            let dx = xx-x;
+            let dy = yy-y;
+
+            let d = (dx*dx + dy*dy).sqrt();
+            let du = (dx*dx + (dy+800.0).powf(2.0)).sqrt();
+            let dd = (dx*dx + (dy-800.0).powf(2.0)).sqrt();
+            let dl = ((dx - 500.0).powf(2.0) + dy*dy).sqrt();
+            let dr = ((dx + 500.0).powf(2.0) + dy*dy).sqrt();
+
+            let d = d.min(du).min(dd).min(dl).min(dr);
+
+            let m = model.model[&(*c, *cc)] / d;
+            fx += (dx/d) * m * 40.0;
+            fy += (dy/d) * m * 40.0;
+        }
+        forces.push((fx, fy));
+    }
 
     let window = app.main_window();
     let device = window.swap_chain_device();
@@ -139,20 +122,29 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
     let draw = &model.draw;
     draw.reset();
+    draw.background().rgb(0.0, 0.0, 0.0);
     let rect = Rect::from_wh([model.texture.size()[0] as f32, model.texture.size()[1] as f32].into());
 
 
-    for (i, s) in model.ca_model.states().iter().enumerate() {
-        let x = i % 25;
-        let y = i / 25;
-        draw.rect().w_h(20.0, 20.0).x_y(x as f32 * 20.0 - 250.0 + 10.0, y as f32 * 20.0 - 400.0 + 10.0).color(hsv(0.0, 1.0, 0.01));
-        let mut color = model.colors[*s as usize];
-        draw.rect().w_h(16.0, 16.0).x_y(x as f32 * 20.0 - 250.0 + 10.0, y as f32 * 20.0 - 400.0 + 10.0).color(color);
-        color.hue += 18.0;
-        color.value = 0.4;
-        draw.rect().w_h(10.0, 10.0).x_y(x as f32 * 20.0 - 250.0 + 10.0, y as f32 * 20.0 - 400.0 + 10.0).color(color);
+    for ((fx, fy), (xx, yy, vx, vy, c)) in forces.into_iter().zip(&mut model.dots) {
+        *vx += fx;
+        *vy += fy;
+        *vx = (*vx * 0.9).min(10.0).max(-10.0);
+        *vy = (*vy * 0.9).min(10.0).max(-10.0);
+        *xx += *vx;
+        if *xx > 510.0 {
+            *xx -= 520.0;
+        } else if *xx < -10.0 {
+            *xx += 520.0;
+        }
+        *yy += *vy;
+        if *yy > 810.0 {
+            *yy -= 820.0;
+        } else if *yy < -10.0 {
+            *yy += 820.0;
+        }
+        draw.ellipse().w_h(5.0, 5.0).x_y(*xx - 250.0, *yy - 400.0).color(model.colors[*c]);
     }
-
 
 
     let mut encoder = device.create_command_encoder(&ce_desc);

@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use nannou::rand::{rngs::SmallRng, Rng, SeedableRng, prelude::*};
 use mathru::statistics::test::{ChiSquare, Test};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct Rule {
     neighborhood: Neighborhood,
     current: State,
@@ -10,6 +10,18 @@ struct Rule {
     target: u32,
     comparison: Comparison,
     result: State,
+}
+
+impl std::cmp::Ord for Rule {
+        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+            (self.current.0, self.target).cmp(&(other.current.0, other.target))
+        }
+}
+
+impl std::cmp::PartialOrd for Rule {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            Some((self.current.0, self.target).cmp(&(other.current.0, other.target)))
+        }
 }
 
 impl Rule {
@@ -68,7 +80,7 @@ impl Rule {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum Neighborhood {
     VonNeuman,
     Conway,
@@ -77,9 +89,9 @@ enum Neighborhood {
 
 impl Neighborhood {
     fn new_random<R: Rng>(rng: &mut R) -> Self {
-        let distance = rng.gen_range(1, 14);
+        let distance = rng.gen_range(1, 4);
         //*[Neighborhood::VonNeuman, Neighborhood::Conway, Neighborhood::ManhattanDistance(distance)].choose(rng).unwrap()
-        Neighborhood::ManhattanDistance(distance)
+        Neighborhood::Conway
     }
 
     fn mutate<R: Rng>(&mut self, rng: &mut R) {
@@ -140,7 +152,7 @@ impl Neighborhood {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 struct State(u32);
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum Comparison {
     Equal,
     GreaterThan,
@@ -200,8 +212,10 @@ pub struct Model {
 impl Model {
     pub fn new_random<R: Rng>(width: u32, height: u32, rule_count: u32, state_count: u32, rng: &mut R) -> Self {
         let initial_state:Vec<State> = (0..width*height).map(|_| State(rng.gen_range(0, state_count))).collect();
+        let mut rules:Vec<_> = (0..rule_count).map(|_| Rule::new_random(state_count, rng)).collect();
+        //rules.sort();
         Self {
-            rules: (0..rule_count).map(|_| Rule::new_random(state_count, rng)).collect(),
+            rules,
             state: initial_state.clone(),
             initial_state,
             time_in_state: vec![0; (width*height) as usize],
@@ -344,7 +358,8 @@ impl Model {
         Stats {
             time_in_state,
             path_score,
-            change_score: changes as f32 / (100.0*100.0)
+            change_score: changes as f32 / (100.0*100.0),
+            uniqueness: self.frames.iter().collect::<HashSet<_>>().len() as f32 / self.frames.len() as f32,
         }
     }
 }
@@ -353,4 +368,5 @@ pub struct Stats {
     pub time_in_state: f32,
     pub path_score: f32,
     pub change_score: f32,
+    pub uniqueness: f32,
 }
