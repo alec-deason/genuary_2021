@@ -122,8 +122,8 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
     let draw = &model.draw;
     draw.reset();
-    draw.background().rgb(0.0, 0.0, 0.0);
     let rect = Rect::from_wh([model.texture.size()[0] as f32, model.texture.size()[1] as f32].into());
+    draw.rect().w_h(rect.w(), rect.h()).rgba(0.1, 0.1, 0.1, 0.1);
 
 
     for ((fx, fy), (xx, yy, vx, vy, c)) in forces.into_iter().zip(&mut model.dots) {
@@ -132,16 +132,16 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         *vx = (*vx * 0.9).min(10.0).max(-10.0);
         *vy = (*vy * 0.9).min(10.0).max(-10.0);
         *xx += *vx;
-        if *xx > 510.0 {
-            *xx -= 520.0;
-        } else if *xx < -10.0 {
-            *xx += 520.0;
+        if *xx > 500.0 {
+            *xx -= 500.0;
+        } else if *xx < 0.0 {
+            *xx += 500.0;
         }
         *yy += *vy;
-        if *yy > 810.0 {
-            *yy -= 820.0;
-        } else if *yy < -10.0 {
-            *yy += 820.0;
+        if *yy > 800.0 {
+            *yy -= 800.0;
+        } else if *yy < 0.0 {
+            *yy += 800.0;
         }
         draw.ellipse().w_h(5.0, 5.0).x_y(*xx - 250.0, *yy - 400.0).color(model.colors[*c]);
     }
