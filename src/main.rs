@@ -54,7 +54,7 @@ fn model(app: &App) -> Model {
    let mut rng = thread_rng();
 
    let mut model = HashMap::new();
-   let color_count = 10;
+   let color_count = 14;
    for a in 0..color_count {
        for b in 0..color_count {
            model.insert((a, b), (rng.gen::<f32>()-0.5) * 2.0);
@@ -72,7 +72,7 @@ fn model(app: &App) -> Model {
         texture,
         draw,
         renderer,
-        noise: LoopingNoise::new(60*10, 10, 300),
+        noise: LoopingNoise::new(60*10, 10, dots.len() as u32),
         texture_capturer,
         model: model,
         dots,
@@ -86,28 +86,37 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
 
     let mut elapsed_frames = app.main_window().elapsed_frames();
+    let noise = model.noise.for_frame(elapsed_frames);
     let mut forces = Vec::with_capacity(model.dots.len());
     for (i, (x, y, _, _, c)) in model.dots.iter().enumerate() {
         let mut fx = 0.0;
         let mut fy = 0.0;
         for (j, (xx, yy, _, _, cc)) in model.dots.iter().enumerate() {
-            if xx == x && yy == y {
+            if i == j {
                 continue
             }
             let dx = xx-x;
             let dy = yy-y;
 
-            let d = (dx*dx + dy*dy).sqrt();
-            let du = (dx*dx + (dy+800.0).powf(2.0)).sqrt();
-            let dd = (dx*dx + (dy-800.0).powf(2.0)).sqrt();
-            let dl = ((dx - 500.0).powf(2.0) + dy*dy).sqrt();
-            let dr = ((dx + 500.0).powf(2.0) + dy*dy).sqrt();
+            let mut ds = Vec::with_capacity(9);
+            for ddx in -1..2 {
+                for ddy in -1..2 {
+                    let dx = dx + 500.0 * ddx as f32;
+                    let dy = dy + 800.0 * ddy as f32;
+                    ds.push((
+                        dx,
+                        dy,
+                        (dx*dx+dy*dy).sqrt()
+                    ));
+                }
+            }
 
-            let d = d.min(du).min(dd).min(dl).min(dr);
+            let (dx, dy, d) = ds.iter().min_by_key(|(dx, dy, d)| (d*1000.0) as i32).unwrap();
 
-            let m = model.model[&(*c, *cc)] / d;
-            fx += (dx/d) * m * 40.0;
-            fy += (dy/d) * m * 40.0;
+            let m = model.model[&(*c, *cc)] / d.powf(1.5);
+            let r = noise.get(i) * 70.0;
+            fx += ((dx/d) * m * 1600.0) / r;
+            fy += ((dy/d) * m * 1600.0) / r;
         }
         forces.push((fx, fy));
     }
@@ -118,15 +127,14 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         label: Some("texture renderer"),
     };
 
-    let noise = model.noise.for_frame(elapsed_frames);
 
     let draw = &model.draw;
     draw.reset();
     let rect = Rect::from_wh([model.texture.size()[0] as f32, model.texture.size()[1] as f32].into());
-    draw.rect().w_h(rect.w(), rect.h()).rgba(0.1, 0.1, 0.1, 0.1);
+    draw.rect().w_h(rect.w(), rect.h()).rgba(0.1, 0.1, 0.1, 1.0);
 
 
-    for ((fx, fy), (xx, yy, vx, vy, c)) in forces.into_iter().zip(&mut model.dots) {
+    for (i, ((fx, fy), (xx, yy, vx, vy, c))) in forces.into_iter().zip(&mut model.dots).enumerate() {
         *vx += fx;
         *vy += fy;
         *vx = (*vx * 0.9).min(10.0).max(-10.0);
@@ -143,7 +151,8 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         } else if *yy < 0.0 {
             *yy += 800.0;
         }
-        draw.ellipse().w_h(5.0, 5.0).x_y(*xx - 250.0, *yy - 400.0).color(model.colors[*c]);
+        let r = noise.get(i) * 70.0;
+        draw.ellipse().w_h(r, r).x_y(*xx - 250.0, *yy - 400.0).color(model.colors[*c]);
     }
 
 
