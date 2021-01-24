@@ -54,13 +54,13 @@ fn model(app: &App) -> Model {
    let mut rng = thread_rng();
 
    let mut model = HashMap::new();
-   let color_count = 14;
+   let color_count = 7;
    for a in 0..color_count {
        for b in 0..color_count {
-           model.insert((a, b), (rng.gen::<f32>()-0.5) * 2.0);
+           model.insert((a, b), (rng.gen::<f32>().powf(2.0)-0.5) * 2.0);
        }
    }
-   let dots:Vec<_> = (0..1000).map(|_| (rng.gen_range(0.0, 500.0), rng.gen_range(0.0, 800.0), 0.0, 0.0, rng.gen_range(0, color_count))).collect();
+   let dots:Vec<_> = (0..70).map(|_| (rng.gen_range(0.0, 500.0), rng.gen_range(0.0, 800.0), 0.0, 0.0, rng.gen_range(0, color_count))).collect();
 
 
 
@@ -113,10 +113,10 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
             let (dx, dy, d) = ds.iter().min_by_key(|(dx, dy, d)| (d*1000.0) as i32).unwrap();
 
-            let m = model.model[&(*c, *cc)] / d.powf(1.5);
-            let r = noise.get(i) * 70.0;
-            fx += ((dx/d) * m * 1600.0) / r;
-            fy += ((dy/d) * m * 1600.0) / r;
+            let m = model.model[&(*c, *cc)] / d.powf(2.0);
+            let r = noise.get(i).powf(3.0) * 70.0;
+            fx += ((dx/d) * m * 100.0) / r;
+            fy += ((dy/d) * m * 100.0) / r;
         }
         forces.push((fx, fy));
     }
