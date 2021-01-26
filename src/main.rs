@@ -17,8 +17,8 @@ struct Model {
     noise: LoopingNoise,
     texture_capturer: wgpu::TextureCapturer,
     model: HashMap<(usize, usize), f32>,
-    dots: Vec<(f32, f32, f32, f32, usize)>,
-    colors: Vec<Hsv>,
+    dots: Vec<(f32, f32, f32, f32, usize, f32, f32)>,
+    colors: Vec<Hsva>,
 }
 
 fn model(app: &App) -> Model {
@@ -57,14 +57,14 @@ fn model(app: &App) -> Model {
    let color_count = 7;
    for a in 0..color_count {
        for b in 0..color_count {
-           model.insert((a, b), (rng.gen::<f32>().powf(2.0)-0.5) * 2.0);
+           model.insert((a, b), (rng.gen::<f32>().powf(4.0)-0.5) * 2.0);
        }
    }
-   let dots:Vec<_> = (0..70).map(|_| (rng.gen_range(0.0, 500.0), rng.gen_range(0.0, 800.0), 0.0, 0.0, rng.gen_range(0, color_count))).collect();
+   let dots:Vec<_> = (0..200).map(|_| (rng.gen_range(0.0, 500.0), rng.gen_range(0.0, 800.0), 0.0, 0.0, rng.gen_range(0, color_count), 0.0, 0.0)).collect();
 
 
 
-   let mut colors:Vec<_> = (0..color_count).map(|i| hsv(i as f32 / color_count as f32, 1.0, 1.0 - i as f32 / (color_count + 1) as f32)).collect();
+   let mut colors:Vec<_> = (0..color_count).map(|i| hsva(i as f32 / color_count as f32, 1.0, 1.0 - i as f32 / (color_count + 1) as f32, 1.0)).collect();
    //colors.shuffle(&mut rng);
    println!("{:?}", colors);
 
@@ -88,10 +88,10 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     let mut elapsed_frames = app.main_window().elapsed_frames();
     let noise = model.noise.for_frame(elapsed_frames);
     let mut forces = Vec::with_capacity(model.dots.len());
-    for (i, (x, y, _, _, c)) in model.dots.iter().enumerate() {
+    for (i, (x, y, _, _, c, _, _)) in model.dots.iter().enumerate() {
         let mut fx = 0.0;
         let mut fy = 0.0;
-        for (j, (xx, yy, _, _, cc)) in model.dots.iter().enumerate() {
+        for (j, (xx, yy, _, _, cc, _, _)) in model.dots.iter().enumerate() {
             if i == j {
                 continue
             }
@@ -134,26 +134,47 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     draw.rect().w_h(rect.w(), rect.h()).rgba(0.1, 0.1, 0.1, 1.0);
 
 
-    for (i, ((fx, fy), (xx, yy, vx, vy, c))) in forces.into_iter().zip(&mut model.dots).enumerate() {
+    for (i, ((fx, fy), (xx, yy, vx, vy, c, rr, rrr))) in forces.into_iter().zip(&mut model.dots).enumerate() {
         *vx += fx;
         *vy += fy;
+        let a = vy.atan2(*vx) + 2.2;
         *vx = (*vx * 0.9).min(10.0).max(-10.0);
         *vy = (*vy * 0.9).min(10.0).max(-10.0);
-        *xx += *vx;
-        if *xx > 500.0 {
-            *xx -= 500.0;
-        } else if *xx < 0.0 {
-            *xx += 500.0;
+        *vx += *vx * a.cos() * 0.1;
+        *vy += *vy * a.sin() * 0.1;
+        *xx += *vx / 5.0;
+        if *xx > 600.0 {
+            *xx -= 600.0;
+        } else if *xx < -100.0 {
+            *xx += 600.0;
         }
-        *yy += *vy;
-        if *yy > 800.0 {
-            *yy -= 800.0;
-        } else if *yy < 0.0 {
-            *yy += 800.0;
+        *yy += *vy / 5.0;
+        if *yy > 900.0 {
+            *yy -= 900.0;
+        } else if *yy < -100.0 {
+            *yy += 900.0;
         }
+        let r = noise.get(i) * 70.0;
+        *rr = *rr * 0.99 + (vx.max(*vy).abs().min(10.0) / 10.0) * 3.0 * r * 0.01;
+        *rr = rr.max(r * 0.85);
+        *rrr = *rrr * 0.95 + (vx.max(*vy).abs().min(10.0) / 10.0) * 2.0 * r * 0.05;
+        let mut c = model.colors[*c];
+        c.hue += 180.0;
+        draw.ellipse().w_h(*rr * 1.15, *rr * 1.15).x_y(*xx - 250.0, *yy - 400.0).color(c);
+        draw.ellipse().w_h(*rr, *rr).x_y(*xx - 250.0, *yy - 400.0).color(hsv(0.0, 0.0, 0.1));
+    }
+    for (i, (xx, yy, vx, vy, c, _, _)) in model.dots.iter().enumerate() {
         let r = noise.get(i) * 70.0;
         draw.ellipse().w_h(r, r).x_y(*xx - 250.0, *yy - 400.0).color(model.colors[*c]);
     }
+    /*
+    for (i, (xx, yy, vx, vy, c, _, rr)) in model.dots.iter().enumerate() {
+        let mut c = model.colors[*c];
+        c.hue += 180.0;
+        c.alpha = 0.1;
+        draw.ellipse().w_h(*rr, *rr).x_y(*xx - 250.0, *yy - 400.0).color(c);
+    }
+    */
 
 
     let mut encoder = device.create_command_encoder(&ce_desc);
