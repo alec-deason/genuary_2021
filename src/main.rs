@@ -60,7 +60,7 @@ fn model(app: &App) -> Model {
            model.insert((a, b), (rng.gen::<f32>().powf(4.0)-0.5) * 2.0);
        }
    }
-   let dots:Vec<_> = (0..200).map(|_| (rng.gen_range(0.0, 500.0), rng.gen_range(0.0, 800.0), 0.0, 0.0, rng.gen_range(0, color_count), 0.0, 0.0)).collect();
+   let dots:Vec<_> = (0..20).map(|_| (rng.gen_range(0.0, 500.0), rng.gen_range(0.0, 800.0), 0.0, 0.0, rng.gen_range(0, color_count), 0.0, 0.0)).collect();
 
 
 
@@ -88,6 +88,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     let mut elapsed_frames = app.main_window().elapsed_frames();
     let noise = model.noise.for_frame(elapsed_frames);
     let mut forces = Vec::with_capacity(model.dots.len());
+    let mut stress = vec![0.0; model.dots.len()];
     for (i, (x, y, _, _, c, _, _)) in model.dots.iter().enumerate() {
         let mut fx = 0.0;
         let mut fy = 0.0;
@@ -114,6 +115,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             let (dx, dy, d) = ds.iter().min_by_key(|(dx, dy, d)| (d*1000.0) as i32).unwrap();
 
             let m = model.model[&(*c, *cc)] / d.powf(2.0);
+            stress[j] += m;
             let r = noise.get(i).powf(3.0) * 70.0;
             fx += ((dx/d) * m * 100.0) / r;
             fy += ((dy/d) * m * 100.0) / r;
@@ -165,7 +167,9 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     }
     for (i, (xx, yy, vx, vy, c, _, _)) in model.dots.iter().enumerate() {
         let r = noise.get(i) * 70.0;
-        draw.ellipse().w_h(r, r).x_y(*xx - 250.0, *yy - 400.0).color(model.colors[*c]);
+        let mut c = model.colors[*c];
+        c.saturation *= 1.0 - stress[i].atan().powf(2.0);
+        draw.ellipse().w_h(r, r).x_y(*xx - 250.0, *yy - 400.0).color(c);
     }
     /*
     for (i, (xx, yy, vx, vy, c, _, rr)) in model.dots.iter().enumerate() {
@@ -182,7 +186,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         .renderer
         .render_to_texture(device, &mut encoder, draw, &model.texture);
     window.swap_chain_queue().submit(&[encoder.finish()]);
-    if cfg!(feature = "save_frames") && elapsed_frames < model.noise.period {
+    if cfg!(feature = "save_frames") {
         let mut encoder = device.create_command_encoder(&ce_desc);
         let snapshot = model
                  .texture_capturer
