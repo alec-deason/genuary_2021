@@ -86,6 +86,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
 
     let mut elapsed_frames = app.main_window().elapsed_frames();
+    let t_mul = ((elapsed_frames as f32 / 10.0).sin() + 1.0)/2.0;
     let noise = model.noise.for_frame(elapsed_frames);
     let mut forces = Vec::with_capacity(model.dots.len());
     let mut stress = vec![0.0; model.dots.len()];
@@ -114,11 +115,11 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
             let (dx, dy, d) = ds.iter().min_by_key(|(dx, dy, d)| (d*1000.0) as i32).unwrap();
 
-            let m = model.model[&(*c, *cc)] / d.powf(2.0);
-            stress[j] += m;
-            let r = noise.get(i).powf(3.0) * 70.0;
-            fx += ((dx/d) * m * 100.0) / r;
-            fy += ((dy/d) * m * 100.0) / r;
+            let m = model.model[&(*c, *cc)] / d.powf(1.2);
+            stress[j] += m.powi(2);
+            let r = noise.get(i).powf(3.0) * 90.0;
+            fx += ((dx/d) * m * 1000.0 * t_mul) / r;
+            fy += ((dy/d) * m * 1000.0 * t_mul) / r;
         }
         forces.push((fx, fy));
     }
@@ -142,34 +143,51 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         let a = vy.atan2(*vx) + 2.2;
         *vx = (*vx * 0.9).min(10.0).max(-10.0);
         *vy = (*vy * 0.9).min(10.0).max(-10.0);
-        *vx += *vx * a.cos() * 0.1;
-        *vy += *vy * a.sin() * 0.1;
+        let r = noise.get(i) * 90.0;
+        *vx += (*vx * a.cos() * 0.5);
+        *vy += (*vy * a.sin() * 0.5);
         *xx += *vx / 5.0;
-        if *xx > 600.0 {
-            *xx -= 600.0;
-        } else if *xx < -100.0 {
-            *xx += 600.0;
+        if *xx > 500.0 {
+            *xx -= 500.0;
+        } else if *xx < 0.0 {
+            *xx += 500.0;
         }
         *yy += *vy / 5.0;
-        if *yy > 900.0 {
-            *yy -= 900.0;
-        } else if *yy < -100.0 {
-            *yy += 900.0;
+        if *yy > 800.0 {
+            *yy -= 800.0;
+        } else if *yy < 0.0 {
+            *yy += 800.0;
         }
-        let r = noise.get(i) * 70.0;
+        let r = noise.get(i) * 90.0;
         *rr = *rr * 0.99 + (vx.max(*vy).abs().min(10.0) / 10.0) * 3.0 * r * 0.01;
         *rr = rr.max(r * 0.85);
         *rrr = *rrr * 0.95 + (vx.max(*vy).abs().min(10.0) / 10.0) * 2.0 * r * 0.05;
-        let mut c = model.colors[*c];
-        c.hue += 180.0;
-        draw.ellipse().w_h(*rr * 1.15, *rr * 1.15).x_y(*xx - 250.0, *yy - 400.0).color(c);
-        draw.ellipse().w_h(*rr, *rr).x_y(*xx - 250.0, *yy - 400.0).color(hsv(0.0, 0.0, 0.1));
+    }
+    for (i, (xx, yy, vx, vy, c, rr, rrr)) in model.dots.iter().enumerate() {
+        for ddx in -1..2 {
+            for ddy in -1..2 {
+                let dx = 500.0 * ddx as f32;
+                let dy = 800.0 * ddy as f32;
+                let mut c = model.colors[*c];
+                c.hue += 180.0;
+                draw.ellipse().w_h(*rr * 2.15, *rr * 2.15).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(c);
+                draw.ellipse().w_h(*rr * 2.0, *rr * 2.0).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(hsv(0.0, 0.0, 0.1));
+                draw.ellipse().w_h(*rr * 1.15, *rr * 1.15).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(c);
+                draw.ellipse().w_h(*rr, *rr).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(hsv(0.0, 0.0, 0.1));
+            }
+        }
     }
     for (i, (xx, yy, vx, vy, c, _, _)) in model.dots.iter().enumerate() {
-        let r = noise.get(i) * 70.0;
-        let mut c = model.colors[*c];
-        c.saturation *= 1.0 - stress[i].atan().powf(2.0);
-        draw.ellipse().w_h(r, r).x_y(*xx - 250.0, *yy - 400.0).color(c);
+        for ddx in -1..2 {
+            for ddy in -1..2 {
+                let dx = 500.0 * ddx as f32;
+                let dy = 800.0 * ddy as f32;
+                let r = noise.get(i) * 70.0;
+                let mut c = model.colors[*c];
+                c.saturation *= 1.0 - stress[i].atan().powf(2.0);
+                draw.ellipse().w_h(r, r).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(c);
+            }
+        }
     }
     /*
     for (i, (xx, yy, vx, vy, c, _, rr)) in model.dots.iter().enumerate() {
