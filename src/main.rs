@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use rayon::prelude::*;
 
-use nannou::{prelude::*, math::Matrix4, noise::{Fbm, NoiseFn}};
+use nannou::{prelude::*, math::Matrix4, noise::{Fbm, NoiseFn}, color::Xyz};
 use nannou::rand::{rngs::SmallRng, Rng, SeedableRng, prelude::*};
 
 mod ca;
@@ -18,7 +18,7 @@ struct Model {
     texture_capturer: wgpu::TextureCapturer,
     model: HashMap<(usize, usize), f32>,
     dots: Vec<(f32, f32, f32, f32, usize, f32, f32)>,
-    colors: Vec<Hsva>,
+    colors: Vec<Xyz>,
 }
 
 fn model(app: &App) -> Model {
@@ -54,17 +54,17 @@ fn model(app: &App) -> Model {
    let mut rng = thread_rng();
 
    let mut model = HashMap::new();
-   let color_count = 7;
+   let color_count = 17;
    for a in 0..color_count {
        for b in 0..color_count {
            model.insert((a, b), (rng.gen::<f32>().powf(4.0)-0.5) * 2.0);
        }
    }
-   let dots:Vec<_> = (0..20).map(|_| (rng.gen_range(0.0, 500.0), rng.gen_range(0.0, 800.0), 0.0, 0.0, rng.gen_range(0, color_count), 0.0, 0.0)).collect();
+   let dots:Vec<_> = (0..10).map(|_| (rng.gen_range(0.0, 500.0), rng.gen_range(0.0, 800.0), 0.0, 0.0, rng.gen_range(0, color_count), 0.0, 0.0)).collect();
 
 
 
-   let mut colors:Vec<_> = (0..color_count).map(|i| hsva(i as f32 / color_count as f32, 1.0, 1.0 - i as f32 / (color_count + 1) as f32, 1.0)).collect();
+   let mut colors:Vec<_> = (0..color_count).map(|i| Xyz::new(i as f32 / color_count as f32, 1.0 - i as f32 / color_count as f32, 1.0 - i as f32 / (color_count + 1) as f32)).collect();
    //colors.shuffle(&mut rng);
    println!("{:?}", colors);
 
@@ -140,19 +140,19 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     for (i, ((fx, fy), (xx, yy, vx, vy, c, rr, rrr))) in forces.into_iter().zip(&mut model.dots).enumerate() {
         *vx += fx;
         *vy += fy;
-        let a = vy.atan2(*vx) + 2.2;
-        *vx = (*vx * 0.9).min(10.0).max(-10.0);
-        *vy = (*vy * 0.9).min(10.0).max(-10.0);
+        let a = yy.atan2(*xx) + 1.0;
+        *vx = (*vx * 0.9).min(6.0).max(-6.0);
+        *vy = (*vy * 0.9).min(6.0).max(-6.0);
         let r = noise.get(i) * 90.0;
-        *vx += (*vx * a.cos() * 0.5);
-        *vy += (*vy * a.sin() * 0.5);
-        *xx += *vx / 5.0;
+        *vx += (*vx * a.cos() * 2.0);
+        *vy += (*vy * a.sin() * 2.0);
+        *xx += *vx / 18.10;
         if *xx > 500.0 {
             *xx -= 500.0;
         } else if *xx < 0.0 {
             *xx += 500.0;
         }
-        *yy += *vy / 5.0;
+        *yy += *vy / 18.0;
         if *yy > 800.0 {
             *yy -= 800.0;
         } else if *yy < 0.0 {
@@ -168,12 +168,19 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             for ddy in -1..2 {
                 let dx = 500.0 * ddx as f32;
                 let dy = 800.0 * ddy as f32;
+                draw.ellipse().w_h(*rr * 2.0, *rr * 2.0).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(hsv(0.0, 0.0, 0.6));
+            }
+        }
+    }
+    for (i, (xx, yy, vx, vy, c, rr, rrr)) in model.dots.iter().enumerate() {
+        for ddx in -1..2 {
+            for ddy in -1..2 {
+                let dx = 500.0 * ddx as f32;
+                let dy = 800.0 * ddy as f32;
                 let mut c = model.colors[*c];
-                c.hue += 180.0;
-                draw.ellipse().w_h(*rr * 2.15, *rr * 2.15).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(c);
-                draw.ellipse().w_h(*rr * 2.0, *rr * 2.0).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(hsv(0.0, 0.0, 0.1));
-                draw.ellipse().w_h(*rr * 1.15, *rr * 1.15).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(c);
-                draw.ellipse().w_h(*rr, *rr).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(hsv(0.0, 0.0, 0.1));
+                c.z += 180.0;
+                draw.ellipse().w_h(*rr * 2.05, *rr * 2.05).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(rgba(0.0, 0.0, 0.0, 0.5)).stroke_weight(rr*0.1).stroke(c).caps_round();
+                draw.ellipse().w_h(*rr * 1.05, *rr * 1.05).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(rgba(0.0, 0.0, 0.0, 0.5)).stroke_weight(rr*0.1).stroke(c).caps_round();
             }
         }
     }
@@ -184,7 +191,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
                 let dy = 800.0 * ddy as f32;
                 let r = noise.get(i) * 70.0;
                 let mut c = model.colors[*c];
-                c.saturation *= 1.0 - stress[i].atan().powf(2.0);
+                c.y *= 1.0 - stress[i].atan().powf(2.0);
                 draw.ellipse().w_h(r, r).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(c);
             }
         }
