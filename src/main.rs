@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use rayon::prelude::*;
 
-use nannou::{prelude::*, math::Matrix4, noise::{Fbm, NoiseFn}, color::Xyz};
+use nannou::{prelude::*, math::Matrix4, noise::{Fbm, NoiseFn}, color::Xyza};
 use nannou::rand::{rngs::SmallRng, Rng, SeedableRng, prelude::*};
 
 mod ca;
@@ -18,7 +18,7 @@ struct Model {
     texture_capturer: wgpu::TextureCapturer,
     model: HashMap<(usize, usize), f32>,
     dots: Vec<(f32, f32, f32, f32, usize, f32, f32, f32)>,
-    colors: Vec<Xyz>,
+    colors: Vec<Xyza>,
 }
 
 fn model(app: &App) -> Model {
@@ -60,11 +60,15 @@ fn model(app: &App) -> Model {
            model.insert((a, b), (rng.gen::<f32>().powf(4.0)-0.5) * 2.0);
        }
    }
-   let dots:Vec<_> = (0..10).map(|_| (rng.gen_range(0.0, 500.0), rng.gen_range(0.0, 800.0), 0.0, 0.0, rng.gen_range(0, color_count), 0.0, 0.0, rng.gen_range(0.0, std::f32::consts::PI*2.0))).collect();
+   let dots:Vec<_> = (0..4).map(|_| {
+       let r = rng.gen_range(100.0, 300.0);
+       let rr = r + rng.gen_range(20.0, 100.0);
+       (rng.gen_range(0.0, 500.0), rng.gen_range(0.0, 800.0), 0.0, 0.0, rng.gen_range(0, color_count), r, rr, rng.gen_range(0.0, std::f32::consts::PI*2.0))
+   }).collect();
 
 
 
-   let mut colors:Vec<_> = (0..color_count).map(|i| Xyz::new(i as f32 / color_count as f32, 1.0 - i as f32 / color_count as f32, 1.0 - i as f32 / (color_count + 1) as f32)).collect();
+   let mut colors:Vec<_> = (0..color_count).map(|i| Xyza::new(i as f32 / color_count as f32, 1.0 - i as f32 / color_count as f32, 1.0 - i as f32 / (color_count + 1) as f32, 1.0)).collect();
    //colors.shuffle(&mut rng);
    println!("{:?}", colors);
 
@@ -138,31 +142,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
 
 
     for (i, ((fx, fy), (xx, yy, vx, vy, c, rr, rrr, a))) in forces.into_iter().zip(&mut model.dots).enumerate() {
-        *a += 0.01;
-        *vx += fx;
-        *vy += fy;
-        let r = noise.get(i) * 90.0;
-        let a = yy.atan2(*xx) + 1.0;
-        *vx = (*vx * 0.9).min(6.0).max(-6.0);
-        *vy = (*vy * 0.9).min(6.0).max(-6.0);
-        let r = noise.get(i) * 90.0;
-        *vx += (*vx * a.cos() * 2.0);
-        *vy += (*vy * a.sin() * 2.0);
-        *xx += *vx / 18.10;
-        if *xx > 500.0 {
-            *xx -= 500.0;
-        } else if *xx < 0.0 {
-            *xx += 500.0;
-        }
-        *yy += *vy / 18.0;
-        if *yy > 800.0 {
-            *yy -= 800.0;
-        } else if *yy < 0.0 {
-            *yy += 800.0;
-        }
-        *rr = *rr * 0.99 + (vx.max(*vy).abs().min(10.0) / 10.0) * 3.0 * r * 0.01;
-        *rr = rr.max(r * 0.85);
-        *rrr = *rrr * 0.95 + (vx.max(*vy).abs().min(10.0) / 10.0) * 2.0 * r * 0.05;
+        *a += 0.001;
     }
     for (i, (xx, yy, vx, vy, c, rr, rrr, _)) in model.dots.iter().enumerate() {
         for ddx in -1..2 {
@@ -180,32 +160,32 @@ fn update(app: &App, model: &mut Model, _update: Update) {
                 let dy = 800.0 * ddy as f32;
                 let mut c = model.colors[*c];
                 c.z += 180.0;
-                draw.ellipse().w_h(*rr * 2.05, *rr * 2.05).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(rgba(0.0, 0.0, 0.0, 0.5)).stroke_weight(rr*0.1).stroke(c).caps_round();
+                c.alpha = 0.25;
+                draw.ellipse().w_h(*rr * 2.05, *rr * 2.05).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(rgba(0.0, 0.0, 0.0, 0.5)).stroke_weight(rr*0.2).stroke(c).caps_round();
                 for i in 0..9 {
                     let a = a + (i as f32 / 9.0) * std::f32::consts::PI * 2.0;
                     let x = dx + *xx - 250.0 + a.cos() * rr * 1.025;
                     let y = dy + *yy - 400.0 + a.sin() * rr * 1.025;
-                    draw.ellipse().w_h(rr * 0.13, rr * 0.13).x_y(x, y).rgb(0.1, 0.1, 0.1);
+                    draw.ellipse().w_h(rr * 0.3, rr * 0.3).x_y(x, y).rgb(0.1, 0.1, 0.1);
                 }
-                draw.ellipse().w_h(*rr * 1.05, *rr * 1.05).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(rgba(0.0, 0.0, 0.0, 0.5)).stroke_weight(rr*0.1).stroke(c).caps_round();
+                draw.ellipse().w_h(*rr * 1.05, *rr * 1.05).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(rgba(0.0, 0.0, 0.0, 0.5)).stroke_weight(rr*0.2).stroke(c).caps_round();
                 for i in 0..7 {
                     let a = -a + (i as f32 / 7.0) * std::f32::consts::PI * 2.0;
                     let x = dx + *xx - 250.0 + a.cos() * rr * 0.525;
                     let y = dy + *yy - 400.0 + a.sin() * rr * 0.525;
-                    draw.ellipse().w_h(rr * 0.13, rr * 0.13).x_y(x, y).rgb(0.1, 0.1, 0.1);
+                    draw.ellipse().w_h(rr * 0.3, rr * 0.3).x_y(x, y).rgb(0.1, 0.1, 0.1);
                 }
             }
         }
     }
-    for (i, (xx, yy, vx, vy, c, _, _, _)) in model.dots.iter().enumerate() {
+    for (i, (xx, yy, vx, vy, c, _, rrr, _)) in model.dots.iter().enumerate() {
         for ddx in -1..2 {
             for ddy in -1..2 {
                 let dx = 500.0 * ddx as f32;
                 let dy = 800.0 * ddy as f32;
-                let r = noise.get(i) * 70.0;
                 let mut c = model.colors[*c];
                 c.y *= 1.0 - stress[i].atan().powf(2.0);
-                draw.ellipse().w_h(r, r).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(c);
+                draw.ellipse().w_h(*rrr * 0.8, *rrr * 0.8).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(c);
             }
         }
     }
