@@ -28,7 +28,7 @@ fn model(app: &App) -> Model {
         .new_window()
         .title("nannou")
         .view(view)
-        .msaa_samples(8)
+        .msaa_samples(16)
         .build()
         .unwrap();
     let window = app.window(w_id).unwrap();
@@ -69,14 +69,14 @@ fn model(app: &App) -> Model {
 
 
    let mut colors:Vec<_> = (0..color_count).map(|i| Xyza::new(i as f32 / color_count as f32, 1.0 - i as f32 / color_count as f32, 1.0 - i as f32 / (color_count + 1) as f32, 1.0)).collect();
-   //colors.shuffle(&mut rng);
+   colors.shuffle(&mut rng);
    println!("{:?}", colors);
 
     Model {
         texture,
         draw,
         renderer,
-        noise: LoopingNoise::new(60*10, 10, dots.len() as u32),
+        noise: LoopingNoise::new(60*20, 10, 40),
         texture_capturer,
         model: model,
         dots,
@@ -92,41 +92,6 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     let mut elapsed_frames = app.main_window().elapsed_frames();
     let t_mul = ((elapsed_frames as f32 / 10.0).sin() + 1.0)/2.0;
     let noise = model.noise.for_frame(elapsed_frames);
-    let mut forces = Vec::with_capacity(model.dots.len());
-    let mut stress = vec![0.0; model.dots.len()];
-    for (i, (x, y, _, _, c, _, _, _)) in model.dots.iter().enumerate() {
-        let mut fx = 0.0;
-        let mut fy = 0.0;
-        for (j, (xx, yy, _, _, cc, _, _, _)) in model.dots.iter().enumerate() {
-            if i == j {
-                continue
-            }
-            let dx = xx-x;
-            let dy = yy-y;
-
-            let mut ds = Vec::with_capacity(9);
-            for ddx in -1..2 {
-                for ddy in -1..2 {
-                    let dx = dx + 500.0 * ddx as f32;
-                    let dy = dy + 800.0 * ddy as f32;
-                    ds.push((
-                        dx,
-                        dy,
-                        (dx*dx+dy*dy).sqrt()
-                    ));
-                }
-            }
-
-            let (dx, dy, d) = ds.iter().min_by_key(|(dx, dy, d)| (d*1000.0) as i32).unwrap();
-
-            let m = model.model[&(*c, *cc)] / d.powf(1.2);
-            stress[j] += m.powi(2);
-            let r = noise.get(i).powf(3.0) * 90.0;
-            fx += ((dx/d) * m * 1000.0 * t_mul) / r;
-            fy += ((dy/d) * m * 1000.0 * t_mul) / r;
-        }
-        forces.push((fx, fy));
-    }
 
     let window = app.main_window();
     let device = window.swap_chain_device();
@@ -141,53 +106,32 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     draw.rect().w_h(rect.w(), rect.h()).rgba(0.1, 0.1, 0.1, 1.0);
 
 
-    for (i, ((fx, fy), (xx, yy, vx, vy, c, rr, rrr, a))) in forces.into_iter().zip(&mut model.dots).enumerate() {
-        *a += 0.001;
+    let mut columns:Vec<_> = (0..15).map(|i| noise.get(i)).collect();
+    let total = columns.iter().sum::<f32>();
+    let mul = rect.w() / total;
+    for w in &mut columns {
+        *w *= mul;
     }
-    for (i, (xx, yy, vx, vy, c, rr, rrr, _)) in model.dots.iter().enumerate() {
-        for ddx in -1..2 {
-            for ddy in -1..2 {
-                let dx = 500.0 * ddx as f32;
-                let dy = 800.0 * ddy as f32;
-                draw.ellipse().w_h(*rr * 2.0, *rr * 2.0).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(hsv(0.0, 0.0, 0.6));
-            }
+
+    let mut off = rect.left();
+    for (i, w) in columns.iter().enumerate() {
+        off += w;
+        if i%2 == 0 {
+            continue
         }
+        draw.rect().w_h(*w, rect.h()*2.0).rotate(noise.get(i+15)/40.0).x(off).color(model.colors[i%model.colors.len()]);
     }
-    for (i, (xx, yy, vx, vy, c, rr, rrr, a)) in model.dots.iter().enumerate() {
-        for ddx in -1..2 {
-            for ddy in -1..2 {
-                let dx = 500.0 * ddx as f32;
-                let dy = 800.0 * ddy as f32;
-                let mut c = model.colors[*c];
-                c.z += 180.0;
-                c.alpha = 0.25;
-                draw.ellipse().w_h(*rr * 2.05, *rr * 2.05).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(rgba(0.0, 0.0, 0.0, 0.5)).stroke_weight(rr*0.2).stroke(c).caps_round();
-                for i in 0..9 {
-                    let a = a + (i as f32 / 9.0) * std::f32::consts::PI * 2.0;
-                    let x = dx + *xx - 250.0 + a.cos() * rr * 1.025;
-                    let y = dy + *yy - 400.0 + a.sin() * rr * 1.025;
-                    draw.ellipse().w_h(rr * 0.3, rr * 0.3).x_y(x, y).rgb(0.1, 0.1, 0.1);
-                }
-                draw.ellipse().w_h(*rr * 1.05, *rr * 1.05).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(rgba(0.0, 0.0, 0.0, 0.5)).stroke_weight(rr*0.2).stroke(c).caps_round();
-                for i in 0..7 {
-                    let a = -a + (i as f32 / 7.0) * std::f32::consts::PI * 2.0;
-                    let x = dx + *xx - 250.0 + a.cos() * rr * 0.525;
-                    let y = dy + *yy - 400.0 + a.sin() * rr * 0.525;
-                    draw.ellipse().w_h(rr * 0.3, rr * 0.3).x_y(x, y).rgb(0.1, 0.1, 0.1);
-                }
-            }
+
+    let y = (elapsed_frames as f32 * 2.0) % (rect.h()*3.0) - rect.h()*1.5;
+    draw.ellipse().w_h(420.0, 420.0).x_y(noise.get(0)*rect.w()*0.25, y).rgb(1.0, 0.0, 0.0);
+
+    let mut off = rect.left();
+    for (i, w) in columns.iter().enumerate() {
+        off += w;
+        if i%2 != 0 {
+            continue
         }
-    }
-    for (i, (xx, yy, vx, vy, c, _, rrr, _)) in model.dots.iter().enumerate() {
-        for ddx in -1..2 {
-            for ddy in -1..2 {
-                let dx = 500.0 * ddx as f32;
-                let dy = 800.0 * ddy as f32;
-                let mut c = model.colors[*c];
-                c.y *= 1.0 - stress[i].atan().powf(2.0);
-                draw.ellipse().w_h(*rrr * 0.8, *rrr * 0.8).x_y(dx + *xx - 250.0, dy + *yy - 400.0).color(c);
-            }
-        }
+        draw.rect().w_h(*w, rect.h()*2.0).rotate(noise.get(i+15)/40.0).x(off).color(model.colors[i%model.colors.len()]);
     }
 
 
