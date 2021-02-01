@@ -76,7 +76,7 @@ fn model(app: &App) -> Model {
         texture,
         draw,
         renderer,
-        noise: LoopingNoise::new(60*20, 10, 40),
+        noise: LoopingNoise::new(60*20, 10, 100),
         texture_capturer,
         model: model,
         dots,
@@ -106,30 +106,25 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     draw.rect().w_h(rect.w(), rect.h()).rgba(0.1, 0.1, 0.1, 1.0);
 
 
-    let mut columns:Vec<_> = (0..15).map(|i| noise.get(i)).collect();
+    let static_noise = model.noise.for_frame(0);
+    let mut columns:Vec<_> = (0..15).map(|i| static_noise.get(i)).collect();
     let total = columns.iter().sum::<f32>();
     let mul = rect.w() / total;
     for w in &mut columns {
         *w *= mul;
     }
 
-    let mut off = rect.left();
-    for (i, w) in columns.iter().enumerate() {
-        off += w;
-        if i%2 == 0 {
-            continue
-        }
-        draw.rect().w_h(*w, rect.h()*2.0).rotate(noise.get(i+15)/40.0).x(off).color(model.colors[i%model.colors.len()]);
-    }
-
-    let y = (elapsed_frames as f32 * 2.0) % (rect.h()*3.0) - rect.h()*1.5;
-    draw.ellipse().w_h(420.0, 420.0).x_y(noise.get(0)*rect.w()*0.25, y).rgb(1.0, 0.0, 0.0);
+    let mut spheres:Vec<_> = (0..5).map(|i| (i*3, static_noise.get(i*2)+1.5, static_noise.get(i*2+1), static_noise.get(i*10)*300.0)).collect();
 
     let mut off = rect.left();
     for (i, w) in columns.iter().enumerate() {
         off += w;
-        if i%2 != 0 {
-            continue
+        if !spheres.is_empty() {
+            if i > spheres[0].0 {
+                let (_, a, b,r) = spheres.remove(0);
+                let y = (elapsed_frames as f32 * a) % (rect.h()*3.0) - rect.h()*b;
+                draw.ellipse().w_h(r, r).x_y(rect.w()*0.3, y).rgb(1.0, 0.0, 0.0);
+            }
         }
         draw.rect().w_h(*w, rect.h()*2.0).rotate(noise.get(i+15)/40.0).x(off).color(model.colors[i%model.colors.len()]);
     }
